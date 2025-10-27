@@ -1,0 +1,29 @@
+# Core dependencies for Sparse Matrix Operations Project
+
+# Numerical computing
+numpy>=1.24.0
+
+# Sparse matrix operations (for verification and comparison)
+scipy>=1.10.0
+
+# JIT compilation for performance acceleration
+numba>=0.57.0
+
+# Data handling
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Progress bars
+tqdm>=4.65.0
+
+# Testing
+pytest>=7.3.0
+pytest-cov>=4.1.0
+
+# Optional: GPU acceleration (uncomment if using CUDA)
+# cupy-cuda11x>=12.0.0  # Use appropriate CUDA version
+
+# Logging and utilities
+colorlog>=6.7.0
