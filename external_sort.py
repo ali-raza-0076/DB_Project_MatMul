@@ -377,13 +377,24 @@ def sort_sparse_matrix(input_csv, output_csv, chunk_size_mb=100, logger=None):
 
 
 if __name__ == "__main__":
+    import sys
+    
     # Simple test/demo
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     
-    #The chunk_size_mb parameter controls MEMORY usage during sorting
-    # Example usage:
-    sort_sparse_matrix("C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\data\\input\\matrix.csv", "C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\data\\ouput\\matrix_b_sorted.csv", chunk_size_mb=50)
-    
-    print("External Sorter module loaded successfully")
-    print("Usage: from external_sort import sort_sparse_matrix")
+    # Check for command-line arguments
+    if len(sys.argv) == 3:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+        sort_sparse_matrix(input_file, output_file, chunk_size_mb=50)
+        print(f"Successfully sorted {input_file} -> {output_file}")
+    else:
+        # Default behavior with hardcoded paths
+        #The chunk_size_mb parameter controls MEMORY usage during sorting
+        # Example usage:
+        sort_sparse_matrix("C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\data\\input\\matrix.csv", "C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\data\\ouput\\matrix_b_sorted.csv", chunk_size_mb=50)
+        
+        print("External Sorter module loaded successfully")
+        print("Usage: from external_sort import sort_sparse_matrix")
+        print("Or: python external_sort.py <input.csv> <output.csv>")

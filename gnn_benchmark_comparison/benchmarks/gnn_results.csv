@@ -1,0 +1,4 @@
+Graph,Nodes,Edges,Sparsity%,SparseTime(s),DenseTime(s),Speedup,Winner,SparseMem(MB),DenseMem(MB)
+Small,500,9799,96.0804,0.002812,0.242407,86.20,Sparse,0.30,1.91
+Medium,1000,19799,98.0201,0.004940,1.989960,402.83,Sparse,0.60,7.63
+Large,1500,44537,98.0206,0.019094,7.522917,394.00,Sparse,1.36,17.17

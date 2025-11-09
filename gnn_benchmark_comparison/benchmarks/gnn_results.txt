@@ -1,0 +1,29 @@
+GNN BENCHMARK: Graph Adjacency Matrix Multiplication
+Dense CPU vs Sparse CPU (CSR×CSR)
+======================================================================
+
+Runs per test: 3
+
+Graph Descriptions:
+  Small   : Small social network (500 nodes, ~98% sparse)
+  Medium  : Medium social network (1000 nodes, ~98% sparse)
+  Large   : Large social network (1500 nodes, ~98.7% sparse)
+
++---------+---------+---------+------------+---------------+--------------+-----------+----------+
+| Graph   | Nodes   | Edges   | Sparsity   | Sparse Time   | Dense Time   | Speedup   | Winner   |
++=========+=========+=========+============+===============+==============+===========+==========+
+| Small   | 500     | 9,799   | 96.0804%   | 0.002812s     | 0.242407s    | 86.20×    | Sparse   |
++---------+---------+---------+------------+---------------+--------------+-----------+----------+
+| Medium  | 1,000   | 19,799  | 98.0201%   | 0.004940s     | 1.989960s    | 402.83×   | Sparse   |
++---------+---------+---------+------------+---------------+--------------+-----------+----------+
+| Large   | 1,500   | 44,537  | 98.0206%   | 0.019094s     | 7.522917s    | 394.00×   | Sparse   |
++---------+---------+---------+------------+---------------+--------------+-----------+----------+
+
+SUMMARY
+======================================================================
+Sparse wins: 3/3 graph sizes
+Dense wins:  0/3 graph sizes
+
+Small    (    500 nodes): Sparse - 86.20x speedup, 96.0804% sparse
+Medium   (  1,000 nodes): Sparse - 402.83x speedup, 98.0201% sparse
+Large    (  1,500 nodes): Sparse - 394.00x speedup, 98.0206% sparse

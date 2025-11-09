@@ -1,0 +1,31 @@
+======================================================================
+SPARSE MATRIX ADDITION - PARALLEL BENCHMARK REPORT
+======================================================================
+
+Timestamp: 2025-11-09T00:53:30.429800
+
+CONFIGURATION:
+  CPU Cores Used:        8
+  Available Cores:       8
+  Chunk Size:            100,000 entries
+
+INPUT DATA:
+  Matrix A non-zeros:    100,000
+  Matrix B non-zeros:    100,000
+  Total input entries:   200,000
+
+OUTPUT DATA:
+  Result non-zeros:      199,996
+
+PERFORMANCE METRICS:
+  Total Time:            3.873s
+    - Counting:          0.045s
+    - Parallel Process:  3.446s
+    - Merging:           0.381s
+
+EFFICIENCY:
+  Throughput:            51,636 entries/sec
+  Parallel Efficiency:   89.0%
+  Theoretical Speedup:   8x
+
+======================================================================

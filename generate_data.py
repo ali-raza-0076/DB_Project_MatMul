@@ -132,11 +132,12 @@ class SparseMatrixGenerator:
             cols = np.random.randint(0, num_cols, nnz)
             values = np.random.randint(-100, 100, nnz)
         
-        # Write to CSV with progress bar
+        # Write to CSV with progress bar (1-based indexing)
         logger.info(f"Writing to {filepath}...")
         with open(filepath, 'w') as f:
             for i in tqdm(range(nnz), desc="Writing entries", unit=" entries"):
-                f.write(f"{rows[i]},{cols[i]},{values[i]}\n")
+                # Convert from 0-based (internal) to 1-based (external format)
+                f.write(f"{rows[i]+1},{cols[i]+1},{values[i]}\n")
         
         file_size_mb = filepath.stat().st_size / (1024 * 1024)
         logger.info(f"✓ Generated {filepath} ({file_size_mb:.1f} MB)")
@@ -184,7 +185,8 @@ class SparseMatrixGenerator:
         logger.info(f"Writing {nnz:,} entries to {filepath}...")
         with open(filepath, 'w') as f:
             for i, j, v in tqdm(entries, desc="Writing entries"):
-                f.write(f"{i},{j},{v}\n")
+                # Convert from 0-based (internal) to 1-based (external format)
+                f.write(f"{i+1},{j+1},{v}\n")
         
         file_size_mb = filepath.stat().st_size / (1024 * 1024)
         logger.info(f"✓ Generated {filepath} ({file_size_mb:.1f} MB)")
@@ -240,7 +242,8 @@ class SparseMatrixGenerator:
         logger.info(f"Writing {nnz:,} entries to {filepath}...")
         with open(filepath, 'w') as f:
             for i, j, v in tqdm(entries, desc="Writing entries"):
-                f.write(f"{i},{j},{v}\n")
+                # Convert from 0-based (internal) to 1-based (external format)
+                f.write(f"{i+1},{j+1},{v}\n")
         
         file_size_mb = filepath.stat().st_size / (1024 * 1024)
         logger.info(f"✓ Generated {filepath} ({file_size_mb:.1f} MB)")
@@ -302,7 +305,8 @@ class SparseMatrixGenerator:
                     values = np.random.randn(degree)
                     
                     for j, v in zip(cols, values):
-                        f.write(f"{i},{j},{v}\n")
+                        # Convert from 0-based (internal) to 1-based (external format)
+                        f.write(f"{i+1},{j+1},{v}\n")
         
         file_size_mb = filepath.stat().st_size / (1024 * 1024)
         logger.info(f"✓ Generated {filepath} ({file_size_mb:.1f} MB)")

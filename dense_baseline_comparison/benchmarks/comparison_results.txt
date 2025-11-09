@@ -1,0 +1,19 @@
+SPARSE vs DENSE MULTIPLICATION BENCHMARK
+============================================================
+
+Matrix Size: 1000×1000
+Entries: A=1000, B=1000
+Sparsity: A=99.90%, B=99.90%
+
+Memory Usage:
+  Sparse: 31.25 KB
+  Dense:  15625.00 KB
+  Ratio:  500.00×
+
+Execution Time:
+  Sparse (CSR×CSC): 0.000310s ± 0.000085s
+  Dense (numpy):    0.029116s ± 0.001069s
+  Speedup:          93.78x
+
+Result: 1024 non-zero entries
+Verification: CORRECT

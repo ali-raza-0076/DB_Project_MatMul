@@ -1,0 +1,28 @@
+{
+  "matrix_size": "1000\u00d71000",
+  "num_entries": {
+    "A": 1000,
+    "B": 1000,
+    "C": 1024
+  },
+  "sparsity_percent": {
+    "A": 99.9,
+    "B": 99.9
+  },
+  "memory_kb": {
+    "sparse": 31.25,
+    "dense": 15625.0,
+    "ratio": 500.0
+  },
+  "time_seconds": {
+    "sparse_avg": 0.00031046666666660155,
+    "sparse_std": 8.480064203106618e-05,
+    "dense_avg": 0.02911649999999999,
+    "dense_std": 0.0010693207283130632,
+    "speedup": 93.78301481642505
+  },
+  "verification": {
+    "max_difference": 0.0,
+    "correct": true
+  }
+}

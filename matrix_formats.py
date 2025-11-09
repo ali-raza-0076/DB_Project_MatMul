@@ -26,32 +26,33 @@ from scipy import sparse as sp
 # Numba-Accelerated Helper Functions
 # ============================================================================
 
-@numba.jit(nopython=True, cache=True)
+@numba.jit(nopython=True, cache=False)
 def _build_csr_arrays(rows, cols, values, num_rows):
     """
     Build CSR arrays from sorted COO data using Numba acceleration.
-    
-    Args:
-        rows: Sorted row indices
-        cols: Column indices
-        values: Values
-        num_rows: Total number of rows
-    
-    Returns:
-        (row_ptr, col_idx, values)
     """
     nnz = len(rows)
     row_ptr = np.zeros(num_rows + 1, dtype=np.int64)
     
-    # Count entries per row
-    for i in range(nnz):
-        row_ptr[rows[i] + 1] += 1
+    # Build row_ptr by iterating through sorted data
+    if nnz > 0:
+        current_row = 0
+        row_ptr[0] = 0
+        
+        for i in range(nnz):
+            row = rows[i]
+            # Fill in empty rows
+            while current_row < row:
+                current_row += 1
+                row_ptr[current_row] = i
+            current_row = row
+        
+        # Fill remaining rows
+        while current_row < num_rows:
+            current_row += 1
+            row_ptr[current_row] = nnz
     
-    # Cumulative sum to get pointers
-    for i in range(1, num_rows + 1):
-        row_ptr[i] += row_ptr[i - 1]
-    
-    return row_ptr, cols.copy(), values.copy()
+    return row_ptr, cols, values
 
 
 @numba.jit(nopython=True, cache=True)
@@ -130,6 +131,96 @@ def _merge_two_sorted_rows(cols1, vals1, cols2, vals2):
     return np.array(result_cols), np.array(result_vals)
 
 
+@numba.jit(nopython=True, cache=True)
+def _merge_duplicates_csc(rows, cols, values):
+    """
+    Merge duplicate (col, row) entries in CSC data by summing values.
+    Assumes data is already sorted by (col, row).
+    
+    Args:
+        rows: Row indices (sorted within each column)
+        cols: Column indices (sorted)
+        values: Values
+    
+    Returns:
+        (merged_rows, merged_cols, merged_vals)
+    """
+    if len(rows) == 0:
+        return rows, cols, values
+    
+    # Allocate output arrays (max size = input size)
+    out_rows = np.empty(len(rows), dtype=rows.dtype)
+    out_cols = np.empty(len(cols), dtype=cols.dtype)
+    out_vals = np.empty(len(values), dtype=values.dtype)
+    
+    # Start with first entry
+    out_rows[0] = rows[0]
+    out_cols[0] = cols[0]
+    out_vals[0] = values[0]
+    out_idx = 0
+    
+    # Process remaining entries
+    for i in range(1, len(rows)):
+        if cols[i] == out_cols[out_idx] and rows[i] == out_rows[out_idx]:
+            # Same (col, row) pair - add values
+            out_vals[out_idx] += values[i]
+        else:
+            # New (col, row) pair
+            out_idx += 1
+            out_rows[out_idx] = rows[i]
+            out_cols[out_idx] = cols[i]
+            out_vals[out_idx] = values[i]
+    
+    # Trim to actual size
+    final_count = out_idx + 1
+    return out_rows[:final_count], out_cols[:final_count], out_vals[:final_count]
+
+
+@numba.jit(nopython=True, cache=True)
+def _merge_duplicates_csr(rows, cols, values):
+    """
+    Merge duplicate (row, col) entries in CSR data by summing values.
+    Assumes data is already sorted by (row, col).
+    
+    Args:
+        rows: Row indices (sorted)
+        cols: Column indices (sorted within each row)
+        values: Values
+    
+    Returns:
+        (merged_rows, merged_cols, merged_vals)
+    """
+    if len(rows) == 0:
+        return rows, cols, values
+    
+    # Allocate output arrays (max size = input size)
+    out_rows = np.empty(len(rows), dtype=rows.dtype)
+    out_cols = np.empty(len(cols), dtype=cols.dtype)
+    out_vals = np.empty(len(values), dtype=values.dtype)
+    
+    # Start with first entry
+    out_rows[0] = rows[0]
+    out_cols[0] = cols[0]
+    out_vals[0] = values[0]
+    out_idx = 0
+    
+    # Process remaining entries
+    for i in range(1, len(rows)):
+        if rows[i] == out_rows[out_idx] and cols[i] == out_cols[out_idx]:
+            # Same (row, col) pair - add values
+            out_vals[out_idx] += values[i]
+        else:
+            # New (row, col) pair
+            out_idx += 1
+            out_rows[out_idx] = rows[i]
+            out_cols[out_idx] = cols[i]
+            out_vals[out_idx] = values[i]
+    
+    # Trim to actual size
+    final_count = out_idx + 1
+    return out_rows[:final_count], out_cols[:final_count], out_vals[:final_count]
+
+
 class COOMatrix:
     """
     Coordinate (COO) format: List of (row, col, value) triples.
@@ -176,12 +267,14 @@ class COOMatrix:
                     parts = line.strip().split(',')
                     if len(parts) == 3:
                         try:
+                            # File uses 1-based indexing, read as-is to find max
                             row, col = int(parts[0]), int(parts[1])
                             max_row = max(max_row, row)
                             max_col = max(max_col, col)
                         except ValueError:
                             continue
-            shape = (max_row + 1, max_col + 1)
+            # Max indices in file are 1-based, so shape is simply (max_row, max_col)
+            shape = (max_row, max_col)
         
         return cls(shape=shape, filepath=str(filepath))
     
@@ -201,7 +294,8 @@ class COOMatrix:
             # Write in-memory data to CSV
             with open(filepath, 'w') as f:
                 for i, j, v in self.data:
-                    f.write(f"{i},{j},{v}\n")
+                    # Convert from 0-based (internal) to 1-based (external format)
+                    f.write(f"{i+1},{j+1},{v}\n")
             self.logger.info(f"Wrote {len(self.data)} entries to {filepath}")
         else:
             raise ValueError("No data to write")
@@ -229,8 +323,9 @@ class COOMatrix:
                     parts = line.strip().split(',')
                     if len(parts) == 3:
                         try:
-                            i = int(parts[0])
-                            j = int(parts[1])
+                            # File uses 1-based indexing, convert to 0-based
+                            i = int(parts[0]) - 1
+                            j = int(parts[1]) - 1
                             v = int(float(parts[2]))
                             chunk.append((i, j, v))
                             
@@ -315,8 +410,9 @@ class COOMatrix:
                     parts = line.strip().split(',')
                     if len(parts) == 3:
                         try:
-                            rows.append(int(parts[0]))
-                            cols.append(int(parts[1]))
+                            # File uses 1-based indexing, convert to 0-based
+                            rows.append(int(parts[0]) - 1)
+                            cols.append(int(parts[1]) - 1)
                             values.append(int(float(parts[2])))
                         except ValueError:
                             continue
@@ -341,13 +437,6 @@ class CSRMatrix:
     
     def __init__(self, shape: Tuple[int, int], row_ptr: np.ndarray, 
                  col_idx: np.ndarray, values: np.ndarray):
-        """
-        Args:
-            shape: (num_rows, num_cols)
-            row_ptr: Array of size (num_rows + 1), row pointers
-            col_idx: Array of column indices
-            values: Array of nonzero values
-        """
         self.shape = shape
         self.row_ptr = row_ptr
         self.col_idx = col_idx
@@ -641,7 +730,9 @@ def build_csr_from_coo(coo: COOMatrix, block_size: int = 1000) -> CSRMatrix:
     
     num_rows, num_cols = coo.shape
     
-    # Collect all entries into arrays
+    # Add this
+    logger.info("Step 1: Collecting entries...")
+    
     rows_list = []
     cols_list = []
     vals_list = []
@@ -652,18 +743,34 @@ def build_csr_from_coo(coo: COOMatrix, block_size: int = 1000) -> CSRMatrix:
             cols_list.append(j)
             vals_list.append(v)
     
-    # Convert to NumPy arrays
+    # Add this
+    logger.info(f"Step 2: Got {len(rows_list)} entries, converting to arrays...")
+    
     rows = np.array(rows_list, dtype=np.int32)
     cols = np.array(cols_list, dtype=np.int32)
     values = np.array(vals_list, dtype=np.int32)
     
-    logger.info(f"Building CSR arrays with Numba acceleration...")
+    # Add this
+    logger.info(f"Step 3: Merging duplicates...")
+    rows, cols, values = _merge_duplicates_csr(rows, cols, values)
+    logger.info(f"After merging: {len(rows)} entries")
     
-    # Use Numba-accelerated function to build CSR
+    # Add this
+    logger.info(f"Step 4: Calling Numba function...")
+    
     row_ptr, col_idx, values = _build_csr_arrays(rows, cols, values, num_rows)
     
-    logger.info(f"CSR built: {len(values)} nonzeros, {num_rows} rows")
+    # Add this
+    logger.info(f"Step 5: Done! Creating CSRMatrix...")
     
+    logger.info(f"CSR built: {len(values)} nonzeros, {num_rows} rows")
+
+    # ADD THESE:
+    logger.info(f"DEBUG: row_ptr shape={row_ptr.shape}, dtype={row_ptr.dtype}")
+    logger.info(f"DEBUG: col_idx shape={col_idx.shape}, dtype={col_idx.dtype}")
+    logger.info(f"DEBUG: values shape={values.shape}, dtype={values.dtype}")
+    logger.info(f"DEBUG: Creating CSRMatrix object now...")
+
     return CSRMatrix(coo.shape, row_ptr, col_idx, values)
 
 
@@ -686,21 +793,19 @@ def build_csc_from_coo(coo: COOMatrix, block_size: int = 1000) -> CSCMatrix:
         CSCMatrix
     """
     logger = logging.getLogger(__name__)
-    logger.info(f"Building CSC from COO (shape={coo.shape})")
+    logger.info("CSC Step 1: Starting re-sort by column...")
     
     num_rows, num_cols = coo.shape
     
-    # For CSC, we need data sorted by (col, row)
-    # If COO is sorted by (row, col), we need to re-sort
-    
-    # Step 1: Create temporary file sorted by (col, row)
     temp_dir = Path(tempfile.gettempdir())
     temp_sorted_by_col = temp_dir / f"coo_sorted_by_col_{os.getpid()}.csv"
     
-    logger.info("Re-sorting COO by (col, row) for CSC conversion...")
+    logger.info("CSC Step 2: Re-sorting COO by (col, row)...")
     _sort_coo_by_column(coo, str(temp_sorted_by_col))
     
-    # Step 2: Read sorted data and build CSC
+    # Add this
+    logger.info("CSC Step 3: Reading sorted data...")
+    
     rows_list = []
     cols_list = []
     vals_list = []
@@ -710,8 +815,10 @@ def build_csc_from_coo(coo: COOMatrix, block_size: int = 1000) -> CSCMatrix:
             parts = line.strip().split(',')
             if len(parts) == 3:
                 try:
-                    i = int(parts[0])
-                    j = int(parts[1])
+                    # File is sorted as (col, row, value), uses 1-based indexing
+                    # Convert to 0-based and swap back to (row, col)
+                    j = int(parts[0]) - 1  # This is the column index
+                    i = int(parts[1]) - 1  # This is the row index
                     v = int(float(parts[2]))
                     rows_list.append(i)
                     cols_list.append(j)
@@ -719,12 +826,22 @@ def build_csc_from_coo(coo: COOMatrix, block_size: int = 1000) -> CSCMatrix:
                 except ValueError:
                     continue
     
+     # Add this after the reading loop
+    logger.info(f"CSC Step 4: Got {len(cols_list)} entries, converting to arrays...")
     # Convert to arrays
     rows = np.array(rows_list, dtype=np.int32)
     cols = np.array(cols_list, dtype=np.int32)
     values = np.array(vals_list, dtype=np.int32)
     
     logger.info(f"Building CSC arrays with Numba acceleration...")
+    
+    # Merge duplicates BEFORE building CSC (data is already sorted by col, row)
+    logger.info(f"CSC Step 5: Merging duplicates...")
+    rows, cols, values = _merge_duplicates_csc(rows, cols, values)
+    logger.info(f"After merging: {len(rows)} entries")
+    
+    # Add this
+    logger.info(f"CSC Step 6: Calling Numba function...")
     
     # Use Numba-accelerated function
     col_ptr, row_idx, values = _build_csc_arrays(rows, cols, values, num_cols)
@@ -762,8 +879,9 @@ def _sort_coo_by_column(coo: COOMatrix, output_file: str):
     with open(temp_swapped, 'w') as out:
         for chunk in coo.iter_entries():
             for i, j, v in chunk:
-                # Write as (col, row, value) so external sort will sort by col first
-                out.write(f"{j},{i},{v}\n")
+                # Write as (col, row, value) with 1-based indexing
+                # (i, j are already 0-based internally, convert to 1-based)
+                out.write(f"{j+1},{i+1},{v}\n")
     
     # External sort by (col, row)
     sorter = ExternalSorter(chunk_size_mb=100, logger=logger)

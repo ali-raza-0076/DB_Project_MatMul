@@ -1,0 +1,39 @@
+======================================================================
+SPARSE MATRIX MULTIPLICATION - PARALLEL BENCHMARK REPORT
+======================================================================
+
+Timestamp: 2025-11-09T00:49:14.628935
+
+CONFIGURATION:
+  CPU Cores Used:        8
+  Available Cores:       8
+  Block Size:            1000 rows
+  Total Blocks:          50
+
+INPUT MATRICES:
+  Matrix A Shape:        50000 × 50000
+  Matrix A Non-zeros:    100,000
+  Matrix A Sparsity:     0.004%
+
+  Matrix B Shape:        50000 × 50000
+  Matrix B Non-zeros:    100,000
+  Matrix B Sparsity:     0.004%
+
+OUTPUT MATRIX:
+  Result Shape:          50000 × 50000
+  Result Non-zeros:      197,421
+  Result Sparsity:       0.008%
+
+PERFORMANCE METRICS:
+  Total Time:            23.121s
+    - Load & Convert:    1.903s
+    - Parallel Multiply: 20.142s
+    - Merging:           1.074s
+
+EFFICIENCY:
+  Throughput:            8,650 nonzeros/sec
+  Parallel Efficiency:   87.1%
+  Theoretical Speedup:   8x
+  Avg Time per Block:    0.4028s
+
+======================================================================

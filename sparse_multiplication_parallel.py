@@ -31,13 +31,80 @@ import time
 import multiprocessing as mp
 from functools import partial
 import numba
+import json
+from datetime import datetime
 
 from matrix_formats import COOMatrix, CSRMatrix, CSCMatrix
-from sparse_multiplication import (
-    _multiply_row_col,
-    _numpy_argsort_2d,
-    _merge_duplicates_numba
-)
+
+
+# ============================================================================
+# Helper Functions (since they don't exist in sparse_multiplication.py)
+# ============================================================================
+
+@numba.jit(nopython=True, cache=True)
+def _multiply_row_col(row_cols, row_vals, col_rows, col_vals):
+    """
+    Compute dot product of sparse row and sparse column using two-pointer technique.
+    """
+    result = 0.0
+    i, j = 0, 0
+    n1, n2 = len(row_cols), len(col_rows)
+    
+    while i < n1 and j < n2:
+        if row_cols[i] < col_rows[j]:
+            i += 1
+        elif row_cols[i] > col_rows[j]:
+            j += 1
+        else:  # Match found
+            result += row_vals[i] * col_vals[j]
+            i += 1
+            j += 1
+    
+    return result
+
+
+def _numpy_argsort_2d(rows, cols, vals):
+    """
+    Sort COO matrix by (row, col) using numpy lexsort.
+    """
+    # Lexsort sorts by last key first, so we reverse the order
+    sorted_idx = np.lexsort((cols, rows))
+    return rows[sorted_idx], cols[sorted_idx], vals[sorted_idx]
+
+
+@numba.jit(nopython=True, cache=True)
+def _merge_duplicates_numba(rows, cols, vals, count):
+    """
+    Merge duplicate (row, col) entries by summing their values.
+    Assumes input is sorted by (row, col).
+    """
+    if count == 0:
+        return rows, cols, vals, 0
+    
+    # Allocate output arrays
+    out_rows = np.empty(count, dtype=rows.dtype)
+    out_cols = np.empty(count, dtype=cols.dtype)
+    out_vals = np.empty(count, dtype=vals.dtype)
+    
+    out_rows[0] = rows[0]
+    out_cols[0] = cols[0]
+    out_vals[0] = vals[0]
+    
+    out_idx = 0
+    
+    for i in range(1, count):
+        if rows[i] == out_rows[out_idx] and cols[i] == out_cols[out_idx]:
+            # Same position - add values
+            out_vals[out_idx] += vals[i]
+        else:
+            # New position
+            out_idx += 1
+            out_rows[out_idx] = rows[i]
+            out_cols[out_idx] = cols[i]
+            out_vals[out_idx] = vals[i]
+    
+    final_count = out_idx + 1
+    return out_rows, out_cols, out_vals, final_count
 
 
 # ============================================================================
@@ -108,6 +175,7 @@ def _process_row_block_worker(block_idx: int,
     temp_file = os.path.join(temp_dir, f'block_{block_idx:04d}.csv')
     with open(temp_file, 'w', newline='') as f:
         for idx in range(final_count):
+            # Keep 0-based for temporary files (will convert to 1-based at final output)
             f.write(f"{result_rows[idx]},{result_cols[idx]},{result_vals[idx]}\n")
     
     return temp_file
@@ -190,6 +258,16 @@ class ParallelSparseMultiplication:
         self.num_workers = num_workers or mp.cpu_count()
         self.logger = logger or logging.getLogger(__name__)
         self.temp_files = []
+        self.benchmarks = {
+            'total_time': 0,
+            'load_time': 0,
+            'conversion_time': 0,
+            'parallel_multiplication_time': 0,
+            'merge_time': 0,
+            'num_workers': self.num_workers,
+            'block_size': block_size,
+            'num_blocks': 0
+        }
     
     def multiply_matrices(self, file_a: str, file_b: str, output_file: str,
                          shape_a: Tuple[int, int], shape_b: Tuple[int, int]) -> str:
@@ -206,41 +284,83 @@ class ParallelSparseMultiplication:
         Returns:
             Path to output file
         """
+        start_total = time.time()
+        
         if shape_a[1] != shape_b[0]:
             raise ValueError(
                 f"Incompatible dimensions: A is {shape_a}, B is {shape_b}"
             )
         
         self.logger.info(f"="*70)
-        self.logger.info(f"PARALLEL Sparse Matrix Multiplication: A{shape_a} × B{shape_b}")
+        self.logger.info(f"PARALLEL Sparse Matrix Multiplication - BENCHMARK MODE")
+        self.logger.info(f"A{shape_a} × B{shape_b}")
         self.logger.info(f"Workers: {self.num_workers} CPU cores")
+        self.logger.info(f"Block size: {self.block_size} rows")
         self.logger.info(f"="*70)
         
         # Load and convert matrices
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info(f"LOADING & CONVERSION PHASE")
+        self.logger.info(f"{'='*70}")
         self.logger.info("Loading matrices...")
         start_time = time.time()
         
         coo_a = COOMatrix.from_csv(file_a, shape=shape_a)
         coo_b = COOMatrix.from_csv(file_b, shape=shape_b)
         
+        nnz_a = coo_a.count_nnz()
+        nnz_b = coo_b.count_nnz()
+        
+        self.logger.info(f"Matrix A: {nnz_a:,} non-zeros")
+        self.logger.info(f"Matrix B: {nnz_b:,} non-zeros")
+        
         self.logger.info("Converting A to CSR...")
+        start_conv = time.time()
         csr_a = coo_a.to_csr()
+        conv_a_time = time.time() - start_conv
+        self.logger.info(f"  A → CSR: {conv_a_time:.3f}s")
         
         self.logger.info("Converting B to CSC...")
+        start_conv = time.time()
         csc_b = coo_b.to_csc()
+        conv_b_time = time.time() - start_conv
+        self.logger.info(f"  B → CSC: {conv_b_time:.3f}s")
         
         load_time = time.time() - start_time
-        self.logger.info(f"Matrix loading and conversion: {load_time:.2f}s")
+        self.benchmarks['load_time'] = load_time
+        self.benchmarks['conversion_time'] = conv_a_time + conv_b_time
+        self.logger.info(f"\nTotal loading & conversion: {load_time:.3f}s")
         
         # Parallel block multiplication
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info(f"PARALLEL MULTIPLICATION PHASE")
+        self.logger.info(f"{'='*70}")
         self.logger.info(f"Parallel block multiplication with {self.num_workers} workers...")
+        start_mult = time.time()
         result_files = self._multiply_blocked_parallel(csr_a, csc_b)
+        self.benchmarks['parallel_multiplication_time'] = time.time() - start_mult
+        
+        self.logger.info(f"\nParallel multiplication completed in: {self.benchmarks['parallel_multiplication_time']:.3f}s")
+        self.logger.info(f"Speedup potential: {self.num_workers}x (with {self.num_workers} workers)")
         
         # Merge results
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info(f"MERGING PHASE")
+        self.logger.info(f"{'='*70}")
         self.logger.info("Merging results from all blocks...")
+        start_merge = time.time()
         self._merge_block_results(result_files, output_file)
+        self.benchmarks['merge_time'] = time.time() - start_merge
         
-        self.logger.info(f"✓ Parallel multiplication complete: {output_file}")
+        self.benchmarks['total_time'] = time.time() - start_total
+        
+        # Print summary
+        self._print_summary()
+        
+        # Save benchmark report
+        self._save_benchmark_report(output_file, shape_a, shape_b, nnz_a, nnz_b)
+        
+        self.logger.info(f"\n✓ Parallel multiplication complete: {output_file}")
         self.logger.info(f"="*70)
         
         return output_file
@@ -254,6 +374,7 @@ class ParallelSparseMultiplication:
         
         # Create work items (blocks)
         num_blocks = (m + self.block_size - 1) // self.block_size
+        self.benchmarks['num_blocks'] = num_blocks
         work_items = []
         
         for block_idx in range(num_blocks):
@@ -262,6 +383,7 @@ class ParallelSparseMultiplication:
             work_items.append((block_idx, row_start, row_end))
         
         self.logger.info(f"Processing {num_blocks} blocks across {self.num_workers} workers...")
+        self.logger.info(f"Each block processes ~{self.block_size} rows")
         
         # Prepare shared data (CSR/CSC arrays)
         csr_data = (csr_a.row_ptr, csr_a.col_idx, csr_a.values)
@@ -290,8 +412,9 @@ class ParallelSparseMultiplication:
         # Filter out None results (empty blocks)
         result_files = [f for f in result_files if f is not None]
         
-        self.logger.info(f"Parallel computation: {compute_time:.2f}s")
+        self.logger.info(f"Parallel computation: {compute_time:.3f}s")
         self.logger.info(f"Generated {len(result_files)} non-empty blocks")
+        self.logger.info(f"Average time per block: {compute_time/num_blocks:.4f}s")
         
         return result_files
     
@@ -351,7 +474,120 @@ class ParallelSparseMultiplication:
         self.logger.info(f"Writing {final_count} final entries...")
         with open(output_file, 'w', newline='') as f:
             for idx in range(final_count):
-                f.write(f"{rows[idx]},{cols[idx]},{vals[idx]}\n")
+                # Convert from 0-based (internal) to 1-based (external format)
+                f.write(f"{rows[idx]+1},{cols[idx]+1},{vals[idx]}\n")
+    
+    def _print_summary(self):
+        """Print benchmark summary."""
+        self.logger.info(f"\n{'='*70}")
+        self.logger.info(f"PERFORMANCE SUMMARY")
+        self.logger.info(f"{'='*70}")
+        self.logger.info(f"Total execution time:           {self.benchmarks['total_time']:.3f}s")
+        self.logger.info(f"  - Loading & Conversion:       {self.benchmarks['load_time']:.3f}s ({self.benchmarks['load_time']/self.benchmarks['total_time']*100:.1f}%)")
+        self.logger.info(f"  - Parallel Multiplication:    {self.benchmarks['parallel_multiplication_time']:.3f}s ({self.benchmarks['parallel_multiplication_time']/self.benchmarks['total_time']*100:.1f}%)")
+        self.logger.info(f"  - Merging Results:            {self.benchmarks['merge_time']:.3f}s ({self.benchmarks['merge_time']/self.benchmarks['total_time']*100:.1f}%)")
+        self.logger.info(f"\nParallelization configuration:")
+        self.logger.info(f"  - Number of CPU cores:        {self.num_workers}")
+        self.logger.info(f"  - Block size:                 {self.block_size} rows")
+        self.logger.info(f"  - Total blocks processed:     {self.benchmarks['num_blocks']}")
+        self.logger.info(f"{'='*70}")
+    
+    def _save_benchmark_report(self, output_file: str, shape_a: Tuple[int, int], 
+                               shape_b: Tuple[int, int], nnz_a: int, nnz_b: int):
+        """Save detailed benchmark report to file."""
+        # Count result entries
+        result_size = 0
+        if os.path.exists(output_file):
+            with open(output_file, 'r') as f:
+                result_size = sum(1 for _ in f)
+        
+        report = {
+            'operation': 'Sparse Matrix Multiplication (Parallel)',
+            'timestamp': datetime.now().isoformat(),
+            'configuration': {
+                'num_workers': self.num_workers,
+                'block_size': self.block_size,
+                'num_blocks': self.benchmarks['num_blocks'],
+                'available_cores': mp.cpu_count()
+            },
+            'input': {
+                'matrix_a_shape': list(shape_a),
+                'matrix_b_shape': list(shape_b),
+                'matrix_a_nonzeros': nnz_a,
+                'matrix_b_nonzeros': nnz_b,
+                'sparsity_a': round(nnz_a / (shape_a[0] * shape_a[1]) * 100, 3),
+                'sparsity_b': round(nnz_b / (shape_b[0] * shape_b[1]) * 100, 3)
+            },
+            'output': {
+                'result_shape': [shape_a[0], shape_b[1]],
+                'result_nonzeros': result_size,
+                'sparsity_result': round(result_size / (shape_a[0] * shape_b[1]) * 100, 3) if shape_a[0] * shape_b[1] > 0 else 0
+            },
+            'performance': {
+                'total_time_seconds': round(self.benchmarks['total_time'], 3),
+                'load_conversion_seconds': round(self.benchmarks['load_time'], 3),
+                'parallel_multiplication_seconds': round(self.benchmarks['parallel_multiplication_time'], 3),
+                'merge_time_seconds': round(self.benchmarks['merge_time'], 3)
+            },
+            'metrics': {
+                'flops': nnz_a * nnz_b,  # Rough estimate
+                'throughput_nonzeros_per_sec': round((nnz_a + nnz_b) / self.benchmarks['total_time'], 2) if self.benchmarks['total_time'] > 0 else 0,
+                'parallel_efficiency': round(self.benchmarks['parallel_multiplication_time'] / self.benchmarks['total_time'] * 100, 1),
+                'theoretical_speedup': self.num_workers,
+                'avg_time_per_block': round(self.benchmarks['parallel_multiplication_time'] / self.benchmarks['num_blocks'], 4) if self.benchmarks['num_blocks'] > 0 else 0
+            }
+        }
+        
+        # Save as JSON
+        report_file = output_file.replace('.csv', '_benchmark.json')
+        with open(report_file, 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        # Save as readable text
+        report_txt = output_file.replace('.csv', '_benchmark.txt')
+        with open(report_txt, 'w') as f:
+            f.write("="*70 + "\n")
+            f.write("SPARSE MATRIX MULTIPLICATION - PARALLEL BENCHMARK REPORT\n")
+            f.write("="*70 + "\n\n")
+            f.write(f"Timestamp: {report['timestamp']}\n\n")
+            
+            f.write("CONFIGURATION:\n")
+            f.write(f"  CPU Cores Used:        {report['configuration']['num_workers']}\n")
+            f.write(f"  Available Cores:       {report['configuration']['available_cores']}\n")
+            f.write(f"  Block Size:            {report['configuration']['block_size']} rows\n")
+            f.write(f"  Total Blocks:          {report['configuration']['num_blocks']}\n\n")
+            
+            f.write("INPUT MATRICES:\n")
+            f.write(f"  Matrix A Shape:        {report['input']['matrix_a_shape'][0]} × {report['input']['matrix_a_shape'][1]}\n")
+            f.write(f"  Matrix A Non-zeros:    {report['input']['matrix_a_nonzeros']:,}\n")
+            f.write(f"  Matrix A Sparsity:     {report['input']['sparsity_a']:.3f}%\n\n")
+            
+            f.write(f"  Matrix B Shape:        {report['input']['matrix_b_shape'][0]} × {report['input']['matrix_b_shape'][1]}\n")
+            f.write(f"  Matrix B Non-zeros:    {report['input']['matrix_b_nonzeros']:,}\n")
+            f.write(f"  Matrix B Sparsity:     {report['input']['sparsity_b']:.3f}%\n\n")
+            
+            f.write("OUTPUT MATRIX:\n")
+            f.write(f"  Result Shape:          {report['output']['result_shape'][0]} × {report['output']['result_shape'][1]}\n")
+            f.write(f"  Result Non-zeros:      {report['output']['result_nonzeros']:,}\n")
+            f.write(f"  Result Sparsity:       {report['output']['sparsity_result']:.3f}%\n\n")
+            
+            f.write("PERFORMANCE METRICS:\n")
+            f.write(f"  Total Time:            {report['performance']['total_time_seconds']:.3f}s\n")
+            f.write(f"    - Load & Convert:    {report['performance']['load_conversion_seconds']:.3f}s\n")
+            f.write(f"    - Parallel Multiply: {report['performance']['parallel_multiplication_seconds']:.3f}s\n")
+            f.write(f"    - Merging:           {report['performance']['merge_time_seconds']:.3f}s\n\n")
+            
+            f.write("EFFICIENCY:\n")
+            f.write(f"  Throughput:            {report['metrics']['throughput_nonzeros_per_sec']:,.0f} nonzeros/sec\n")
+            f.write(f"  Parallel Efficiency:   {report['metrics']['parallel_efficiency']:.1f}%\n")
+            f.write(f"  Theoretical Speedup:   {report['metrics']['theoretical_speedup']}x\n")
+            f.write(f"  Avg Time per Block:    {report['metrics']['avg_time_per_block']:.4f}s\n\n")
+            
+            f.write("="*70 + "\n")
+        
+        self.logger.info(f"\n📊 Benchmark reports saved:")
+        self.logger.info(f"   JSON: {report_file}")
+        self.logger.info(f"   TXT:  {report_txt}")
 
 
 # ============================================================================
@@ -408,15 +644,31 @@ if __name__ == "__main__":
     print("PARALLEL Sparse Matrix Multiplication")
     print("="*70)
     print(f"\nAvailable CPU cores: {mp.cpu_count()}")
-    print("\nUsage:")
-    print("  from sparse_multiplication_parallel import multiply_matrices_parallel")
-    print("  ")
-    print("  multiply_matrices_parallel(")
-    print("      file_a='data/output/matrix_a_sorted.csv',")
-    print("      file_b='data/output/matrix_b_sorted.csv',")
-    print("      output_file='data/output/result_parallel.csv',")
-    print("      shape_a=(50000, 50000),")
-    print("      shape_b=(50000, 50000),")
-    print("      num_workers=8  # Use 8 CPU cores")
-    print("  )")
+    
+    # File paths
+    file_a = "C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\DB_Project_MatMul\\data\\ouput\\matrix_a_sorted.csv"
+    file_b = "C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\DB_Project_MatMul\\data\\ouput\\matrix_b_sorted.csv"
+    output_file = "C:\\Users\\khald\\OneDrive - University Of Houston\\FALL2025\\COSC 6340\\Project\\Phase 1\\code\\DB_Project_MatMul\\data\\ouput\\matrix_product_parallel.csv"
+    
+    # Matrix dimensions (change to match your data)
+    shape_a = (50000, 50000)
+    shape_b = (50000, 50000)
+    
+    print(f"\nRunning parallel multiplication...")
+    print(f"Input A: {file_a}")
+    print(f"Input B: {file_b}")
+    print(f"Output: {output_file}")
+    print(f"Shape A: {shape_a}")
+    print(f"Shape B: {shape_b}")
+    
+    # Run parallel multiplication
+    multiply_matrices_parallel(
+        file_a=file_a,
+        file_b=file_b,
+        output_file=output_file,
+        shape_a=shape_a,
+        shape_b=shape_b,
+        num_workers=mp.cpu_count()
+    )
+    
     print("="*70)
