@@ -1,0 +1,52 @@
+=============================================================================
+GPU GNN BENCHMARK RESULTS - NVIDIA GeForce RTX 5070 Ti Laptop GPU
+=============================================================================
+
+TEST TYPE: GNN Benchmark (Graph Neural Network Operations)
+METHOD: Dense GPU (PyTorch)
+
+=============================================================================
+GRAPH BENCHMARK RESULTS
+=============================================================================
+
+Small Graph
+-----------
+Nodes: 500
+Edges: 9,801
+Sparsity: 96.08%
+GPU Time: 0.000604 seconds (±0.000355s)
+Description: Small social network with ~98% sparsity
+
+Medium Graph
+------------
+Nodes: 1,000
+Edges: 19,770
+Sparsity: 98.02%
+GPU Time: 0.001699 seconds (±0.000571s)
+Description: Medium social network with ~98% sparsity
+
+Large Graph
+-----------
+Nodes: 1,500
+Edges: 44,578
+Sparsity: 98.02%
+GPU Time: 0.003906 seconds (±0.000532s)
+Description: Large social network with ~98% sparsity
+
+=============================================================================
+SUMMARY
+=============================================================================
+
+GPU times scale linearly with graph size:
+- Small (500 nodes):   ~0.6 milliseconds
+- Medium (1000 nodes): ~1.7 milliseconds
+- Large (1500 nodes):  ~3.9 milliseconds
+
+The RTX 5070 Ti handles even large sparse graphs (98% sparsity) with 
+sub-4ms execution times, demonstrating excellent performance for GNN 
+operations.
+
+Key Observation: Despite high sparsity (96-98%), the GPU's dense matrix 
+multiplication remains extremely fast due to hardware acceleration.
+
+=============================================================================
