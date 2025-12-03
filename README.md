@@ -67,35 +67,35 @@ DB_Project_MatMul/
 
 **Result**: Sparse CSR×CSC wins at all super sparse levels. Speedup increases exponentially with sparsity.
 
-### GNN Dynamic Graph Updates
+### GNN Dynamic Graph Updates (CPU)
 
 **Incremental Edge Addition vs Full Recomputation**
 
-| Density | Sparsity | New Edges | Full Recomp | Incremental | Speedup | Winner |
-|---------|----------|-----------|-------------|-------------|---------|--------|
-| 10% | 90% | 1 | 70.2ms | 7.7ms | **9.1×** | Incremental |
-| 10% | 90% | 2 | 70.9ms | 5.9ms | **12.1×** | Incremental |
-| 10% | 90% | 3 | 68.7ms | 5.5ms | **12.5×** | Incremental |
-| 1% | 99% | 1 | 6.8ms | 1.7ms | **4.0×** | Incremental |
-| 1% | 99% | 2 | 7.9ms | 1.6ms | **4.9×** | Incremental |
-| 1% | 99% | 3 | 6.8ms | 2.4ms | **2.8×** | Incremental |
-| 0.1% | 99.9% | 1 | 0.98ms | 1.66ms | 0.59× | Full Recomp |
-| 0.1% | 99.9% | 2 | 0.91ms | 1.57ms | 0.58× | Full Recomp |
-| 0.1% | 99.9% | 3 | 1.22ms | 1.36ms | 0.90× | Full Recomp |
+| Sparsity | New Edges | Full Recomp (CPU) | Incremental (CPU) | Speedup | Winner |
+|----------|-----------|-------------------|-------------------|---------|--------|
+| 90% | 1 | 68.7ms | 5.7ms | **12.0×** | Incremental |
+| 90% | 2 | 73.5ms | 5.8ms | **12.8×** | Incremental |
+| 90% | 3 | 73.8ms | 6.4ms | **11.6×** | Incremental |
+| 99% | 1 | 8.3ms | 1.8ms | **4.5×** | Incremental |
+| 99% | 2 | 8.1ms | 1.7ms | **4.8×** | Incremental |
+| 99% | 3 | 8.1ms | 2.9ms | **2.8×** | Incremental |
+| 99.9% | 1 | 0.95ms | 1.64ms | 0.58× | Full Recomp |
+| 99.9% | 2 | 0.87ms | 1.30ms | 0.67× | Full Recomp |
+| 99.9% | 3 | 1.12ms | 1.50ms | 0.75× | Full Recomp |
 
-**Result**: Incremental updates (LIL→CSR) win at 90-99% sparsity. At extreme sparsity (99.9%), full recomputation is faster due to overhead of format conversion.
+**Result**: CPU incremental updates (LIL→CSR) win at 90-99% sparsity. At extreme sparsity (99.9%), full recomputation faster due to format conversion overhead.
+
+**Note**: GPU multicore dynamic benchmark script available (`gnn_benchmark_dynamic_gpu.py`) but cannot execute due to PyTorch limitation (RTX 5070 Ti compute capability sm_120 > PyTorch max sm_90).
 
 ### GNN: GPU Dense vs CPU Sparse
 
-| Nodes | Density | Sparsity | Non-Zeros | CPU Sparse | GPU Dense | Speedup | Winner |
-|-------|---------|----------|-----------|------------|-----------|---------|--------|
-| 1,000 | 10% | 90% | 95,178 | 0.058s | 0.002s | **27.6×** | GPU |
-| 1,000 | 1% | 99% | 9,954 | 0.002s | 0.002s | **1.0×** | GPU |
-| 1,000 | 0.1% | 99.9% | 1,000 | 0.0002s | 0.002s | 0.15× | **CPU** |
-| 2,000 | 10% | 90% | 380,453 | 0.317s | 0.010s | **33.3×** | GPU |
-| 2,000 | 1% | 99% | 39,802 | 0.013s | 0.010s | **1.3×** | GPU |
+| Graph | Nodes | Sparsity | Edges | CPU Sparse | GPU Dense | Speedup | Winner |
+|-------|-------|----------|-------|------------|-----------|---------|--------|
+| Small | 500 | 96.08% | 9,799 | 0.0048s | 0.0005s | **9.8×** | GPU |
+| Medium | 1,000 | 98.02% | 19,799 | 0.0087s | 0.0026s | **3.4×** | GPU |
+| Large | 1,500 | 98.02% | 44,537 | 0.0298s | 0.0041s | **7.2×** | GPU |
 
-**Result**: GPU dominates at 90-99% sparsity. CPU sparse wins at extreme sparsity (99.9%).
+**Result**: GPU wins at all graph sizes (3-10×) for typical GNN sparsity (~96-98%).
 
 ### GPU Sparsity Tests
 
@@ -116,18 +116,18 @@ DB_Project_MatMul/
 2. **Speedup increases exponentially** with sparsity: 18× → 826× → 7,591×
 3. **Memory advantage grows** with sparsity: 2.6× → 25× → 250×
 
-### Dynamic Graph Updates
-4. **Incremental updates win at moderate sparsity** (90-99%): 3-12× faster
-5. **Full recomputation wins at extreme sparsity** (99.9%): format conversion overhead exceeds rebuild cost
-6. **Use LIL→CSR for dynamic graphs** with <99% sparsity
+### Dynamic Graph Updates (CPU)
+4. **CPU incremental updates win at moderate sparsity** (90-99%): 3-13× faster than full recomputation
+5. **Full recomputation wins at extreme sparsity** (99.9%): format conversion overhead (LIL→CSR) exceeds rebuild cost
+6. **Use incremental update method**: LIL format for adding edges, then convert to CSR once
 
 ### GPU vs CPU
-7. **GPU optimal for 90-99% sparsity**: 27-33× speedup for larger graphs
-8. **CPU sparse optimal for ≥99.9% sparsity**: minimal computation negates GPU parallelism benefit
-9. **Crossover point**: GPU wins with >1,000 non-zeros
+7. **GPU optimal for typical GNN graphs** (96-98% sparsity): 3-10× speedup over CPU sparse
+8. **GPU advantage consistent across graph sizes**: 500-1500 nodes all show GPU wins
+9. **PyTorch limitation**: RTX 5070 Ti (sm_120) exceeds PyTorch support (max sm_90), limiting some GPU operations
 
 ### Practical Recommendations
-- **Social networks** (90% sparse): Use incremental updates on GPU
+- **Social networks** (90-98% sparse): Use incremental updates (CPU) + GPU for matrix ops
 - **Citation graphs** (99% sparse): Use incremental updates on CPU sparse
 - **Molecular structures** (99.9% sparse): Use full recomputation on CPU sparse
 

@@ -1,105 +1,105 @@
 [
   {
     "num_nodes": 1000,
-    "density_percent": 10,
+    "sparsity_percent": 90,
     "base_edges": 95178,
-    "sparsity": 90.4822,
+    "actual_sparsity": 90.4822,
     "results": [
       {
         "num_new_edges": 1,
-        "full_recomputation_ms": 70.2076667221263,
-        "full_recomputation_std_ms": 3.005631389407543,
-        "incremental_update_ms": 7.678533360982935,
-        "incremental_update_std_ms": 1.682229936650266,
-        "speedup": 9.143369367758918,
+        "full_recomputation_ms": 68.72739999865492,
+        "full_recomputation_std_ms": 3.0960540561227767,
+        "incremental_update_ms": 5.737200030125678,
+        "incremental_update_std_ms": 0.5918099642942954,
+        "speedup": 11.979258111582592,
         "winner": "Incremental"
       },
       {
         "num_new_edges": 2,
-        "full_recomputation_ms": 70.90619998052716,
-        "full_recomputation_std_ms": 4.588946816657453,
-        "incremental_update_ms": 5.8711333355555935,
-        "incremental_update_std_ms": 0.24296501196122494,
-        "speedup": 12.077089026597147,
+        "full_recomputation_ms": 73.4577999683097,
+        "full_recomputation_std_ms": 0.9441970295107984,
+        "incremental_update_ms": 5.75886662894239,
+        "incremental_update_std_ms": 0.2553726367078201,
+        "speedup": 12.755600138251534,
         "winner": "Incremental"
       },
       {
         "num_new_edges": 3,
-        "full_recomputation_ms": 68.68599999385576,
-        "full_recomputation_std_ms": 0.7457542533772226,
-        "incremental_update_ms": 5.491399982323249,
-        "incremental_update_std_ms": 0.1390299293789849,
-        "speedup": 12.50792151636289,
+        "full_recomputation_ms": 73.80233328634252,
+        "full_recomputation_std_ms": 2.8469549512005243,
+        "incremental_update_ms": 6.351733347401023,
+        "incremental_update_std_ms": 0.6457011982183644,
+        "speedup": 11.619243008137403,
         "winner": "Incremental"
       }
     ]
   },
   {
     "num_nodes": 1000,
-    "density_percent": 1,
+    "sparsity_percent": 99,
     "base_edges": 9954,
-    "sparsity": 99.0046,
+    "actual_sparsity": 99.0046,
     "results": [
       {
         "num_new_edges": 1,
-        "full_recomputation_ms": 6.77200003216664,
-        "full_recomputation_std_ms": 0.28406062965411844,
-        "incremental_update_ms": 1.7120666646709044,
-        "incremental_update_std_ms": 0.08442376340419852,
-        "speedup": 3.955453471473532,
+        "full_recomputation_ms": 8.347266664107641,
+        "full_recomputation_std_ms": 0.6035148745268774,
+        "incremental_update_ms": 1.84599997010082,
+        "incremental_update_std_ms": 0.08126487105330829,
+        "speedup": 4.521813000707552,
         "winner": "Incremental"
       },
       {
         "num_new_edges": 2,
-        "full_recomputation_ms": 7.909266705003878,
-        "full_recomputation_std_ms": 0.3709602174550313,
-        "incremental_update_ms": 1.6252667022248108,
-        "incremental_update_std_ms": 0.09201605592622812,
-        "speedup": 4.8664423470787685,
+        "full_recomputation_ms": 8.12070001848042,
+        "full_recomputation_std_ms": 0.1916489550028031,
+        "incremental_update_ms": 1.7032333028813202,
+        "incremental_update_std_ms": 0.11473284946259307,
+        "speedup": 4.767814253480613,
         "winner": "Incremental"
       },
       {
         "num_new_edges": 3,
-        "full_recomputation_ms": 6.750966655090451,
-        "full_recomputation_std_ms": 0.11207809882185324,
-        "incremental_update_ms": 2.422699937596917,
-        "incremental_update_std_ms": 1.199721717381067,
-        "speedup": 2.7865467573284186,
+        "full_recomputation_ms": 8.109266636893153,
+        "full_recomputation_std_ms": 0.2747691438532416,
+        "incremental_update_ms": 2.8727333216617503,
+        "incremental_update_std_ms": 1.70951294380088,
+        "speedup": 2.822840037307152,
         "winner": "Incremental"
       }
     ]
   },
   {
     "num_nodes": 1000,
-    "density_percent": 0.1,
-    "base_edges": 1000,
-    "sparsity": 99.9,
+    "sparsity_percent": 99.9,
+    "base_edges": 999,
+    "actual_sparsity": 99.90010000000001,
     "results": [
       {
         "num_new_edges": 1,
-        "full_recomputation_ms": 0.9831999971841772,
-        "full_recomputation_std_ms": 0.05350373200077353,
-        "incremental_update_ms": 1.6646333582078416,
-        "incremental_update_std_ms": 0.3532365017793492,
-        "speedup": 0.5906405709919802,
+        "full_recomputation_ms": 0.9500000160187483,
+        "full_recomputation_std_ms": 0.05733709815266229,
+        "incremental_update_ms": 1.6380999780570467,
+        "incremental_update_std_ms": 0.16418222082697992,
+        "speedup": 0.579940192139887,
         "winner": "Full Recomp"
       },
       {
         "num_new_edges": 2,
-        "full_recomputation_ms": 0.9138666791841388,
-        "full_recomputation_std_ms": 0.09366161413329888,
-        "incremental_update_ms": 1.5744667034596205,
-        "incremental_update_std_ms": 0.22857125925039018,
-        "speedup": 0.5804293461246741,
+        "full_recomputation_ms": 0.8719000034034252,
+        "full_recomputation_std_ms": 0.08576913561928794,
+        "incremental_update_ms": 1.304900002044936,
+        "incremental_update_std_ms": 0.057163866736524696,
+        "speedup": 0.6681738079830275,
         "winner": "Full Recomp"
       },
       {
         "num_new_edges": 3,
-        "full_recomputation_ms": 1.2169999924177926,
-        "full_recomputation_std_ms": 0.30546077081894635,
-        "incremental_update_ms": 1.3574666809290648,
-        "incremental_update_std_ms": 0.024344368660750595,
-        "speedup": 0.8965229198737052,
+        "full_recomputation_ms": 1.1247999888534348,
+        "full_recomputation_std_ms": 0.2211874409258385,
+        "incremental_update_ms": 1.503133331425488,
+        "incremental_update_std_ms": 0.16925132967338102,
+        "speedup": 0.7483035372429251,
         "winner": "Full Recomp"
       }
     ]

@@ -15,13 +15,13 @@ import json
 from tabulate import tabulate
 from tqdm import tqdm
 
-def create_base_graph(num_nodes, density_percent, seed=42):
+def create_base_graph(num_nodes, sparsity_percent, seed=42):
     """
-    Create base graph adjacency matrix with specified density.
+    Create base graph adjacency matrix with specified sparsity.
     
     Args:
         num_nodes: Number of nodes in graph
-        density_percent: Percentage of non-zero entries (e.g., 10 for 10% density, 90% sparsity)
+        sparsity_percent: Sparsity percentage (90%, 99%, 99.9%)
         seed: Random seed
     
     Returns:
@@ -29,7 +29,8 @@ def create_base_graph(num_nodes, density_percent, seed=42):
     """
     np.random.seed(seed)
     total_elements = num_nodes * num_nodes
-    num_edges = int(total_elements * density_percent / 100.0)
+    density = (100 - sparsity_percent) / 100.0
+    num_edges = int(total_elements * density)
     
     rows = np.random.randint(0, num_nodes, size=num_edges)
     cols = np.random.randint(0, num_nodes, size=num_edges)
@@ -102,13 +103,13 @@ def benchmark_multiplication(A, B, num_runs=3):
     
     return np.mean(times), np.std(times)
 
-def test_dynamic_updates(num_nodes, density_percent, edge_counts=[1, 2, 3], num_runs=3):
+def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num_runs=3):
     """
-    Test dynamic graph updates with varying numbers of new edges.
+    Test dynamic graph updates with varying numbers of new edges (CPU).
     
     Args:
         num_nodes: Graph size
-        density_percent: Initial density (10%, 1%, 0.1%)
+        sparsity_percent: Sparsity percentage (90%, 99%, 99.9%)
         edge_counts: List of edge counts to test [1, 2, 3]
         num_runs: Benchmark repetitions
     
@@ -116,15 +117,15 @@ def test_dynamic_updates(num_nodes, density_percent, edge_counts=[1, 2, 3], num_
         Results dictionary
     """
     print(f"\n{'='*80}")
-    print(f"Dynamic Graph Update Test: {num_nodes} nodes, {density_percent}% density")
+    print(f"Dynamic Graph Update Test (CPU): {num_nodes} nodes, {sparsity_percent}% sparse")
     print(f"{'='*80}")
     
     # Create base graph
     print("Creating base graph...")
-    base_graph, _ = create_base_graph(num_nodes, density_percent)
+    base_graph, _ = create_base_graph(num_nodes, sparsity_percent)
     base_nnz = base_graph.nnz
-    sparsity = 100 * (1 - base_nnz / (num_nodes * num_nodes))
-    print(f"Base graph: {base_nnz:,} edges ({sparsity:.4f}% sparse)")
+    actual_sparsity = 100 * (1 - base_nnz / (num_nodes * num_nodes))
+    print(f"Base graph: {base_nnz:,} edges ({actual_sparsity:.4f}% sparse)")
     
     results = []
     
@@ -175,32 +176,32 @@ def test_dynamic_updates(num_nodes, density_percent, edge_counts=[1, 2, 3], num_
     
     return {
         "num_nodes": num_nodes,
-        "density_percent": density_percent,
+        "sparsity_percent": sparsity_percent,
         "base_edges": int(base_nnz),
-        "sparsity": sparsity,
+        "actual_sparsity": actual_sparsity,
         "results": results
     }
 
 def main():
     print("="*80)
-    print("GNN DYNAMIC GRAPH BENCHMARK")
-    print("Incremental Edge Addition vs Full Recomputation")
+    print("GNN DYNAMIC GRAPH BENCHMARK - CPU")
+    print("Incremental Edge Addition vs Full Recomputation (CPU)")
     print("="*80)
     
-    # Test configurations: super sparse (≤10% density)
+    # Test configurations: super sparse
     test_configs = [
-        {"nodes": 1000, "density": 10},   # 90% sparse
-        {"nodes": 1000, "density": 1},    # 99% sparse
-        {"nodes": 1000, "density": 0.1},  # 99.9% sparse
+        {"nodes": 1000, "sparsity": 90},   # 90% sparse
+        {"nodes": 1000, "sparsity": 99},    # 99% sparse
+        {"nodes": 1000, "sparsity": 99.9},  # 99.9% sparse
     ]
     
     all_results = []
     num_runs = 3
     
-    for config in tqdm(test_configs, desc="Running Tests", unit="config"):
+    for config in tqdm(test_configs, desc="Running CPU Tests", unit="config"):
         result = test_dynamic_updates(
             config["nodes"], 
-            config["density"], 
+            config["sparsity"], 
             edge_counts=[1, 2, 3],
             num_runs=num_runs
         )
@@ -208,11 +209,11 @@ def main():
     
     # Generate summary table
     print("\n" + "="*80)
-    print("SUMMARY: Dynamic Update Performance")
+    print("SUMMARY: Dynamic Update Performance (CPU)")
     print("="*80)
     
     for res in all_results:
-        print(f"\nGraph: {res['num_nodes']} nodes, {res['density_percent']}% density ({res['sparsity']:.2f}% sparse)")
+        print(f"\nGraph: {res['num_nodes']} nodes, {res['sparsity_percent']}% sparse")
         print(f"Base edges: {res['base_edges']:,}")
         
         table_data = []
@@ -225,7 +226,7 @@ def main():
                 r['winner']
             ])
         
-        headers = ["New Edges", "Full Recomp", "Incremental", "Speedup", "Winner"]
+        headers = ["New Edges", "Full Recomp (CPU)", "Incremental (CPU)", "Speedup", "Winner"]
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
     
     # Save results
@@ -236,12 +237,12 @@ def main():
     
     # Save text summary
     with open("gnn_benchmark_comparison/benchmarks/dynamic_graph_results.txt", "w", encoding='utf-8') as f:
-        f.write("GNN DYNAMIC GRAPH BENCHMARK\n")
-        f.write("Incremental Edge Addition vs Full Recomputation\n")
+        f.write("GNN DYNAMIC GRAPH BENCHMARK - CPU\n")
+        f.write("Incremental Edge Addition vs Full Recomputation (CPU)\n")
         f.write("="*80 + "\n\n")
         
         for res in all_results:
-            f.write(f"\nGraph: {res['num_nodes']} nodes, {res['density_percent']}% density ({res['sparsity']:.2f}% sparse)\n")
+            f.write(f"\nGraph: {res['num_nodes']} nodes, {res['sparsity_percent']}% sparse\n")
             f.write(f"Base edges: {res['base_edges']:,}\n\n")
             
             table_data = []
@@ -254,13 +255,14 @@ def main():
                     r['winner']
                 ])
             
-            headers = ["New Edges", "Full Recomp", "Incremental", "Speedup", "Winner"]
+            headers = ["New Edges", "Full Recomp (CPU)", "Incremental (CPU)", "Speedup", "Winner"]
             f.write(tabulate(table_data, headers=headers, tablefmt="grid") + "\n")
     
     print(f"\n✓ Results saved to gnn_benchmark_comparison/benchmarks/dynamic_graph_results.*")
     print("\nKey Finding:")
-    print("Incremental updates using sorted insertion (LIL→CSR) are significantly")
+    print("CPU: Incremental updates using sorted insertion (LIL→CSR) are significantly")
     print("faster than full matrix recomputation for adding small numbers of edges.")
+    print("Compare with gnn_benchmark_dynamic_gpu.py for GPU multicore performance.")
 
 if __name__ == "__main__":
     main()
