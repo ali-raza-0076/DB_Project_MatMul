@@ -25,8 +25,8 @@ tqdm>=4.65.0
 pytest>=7.3.0
 pytest-cov>=4.1.0
 
-# Optional: GPU acceleration (uncomment if using CUDA)
-# cupy-cuda11x>=12.0.0  # Use appropriate CUDA version
-
 # Logging and utilities
 colorlog>=6.7.0
+
+# Optional: GPU acceleration (uncomment if using CUDA)
+# cupy-cuda11x>=12.0.0  # Use appropriate CUDA version

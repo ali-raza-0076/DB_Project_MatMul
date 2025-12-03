@@ -88,7 +88,7 @@ Both should report **100% CORRECT**.
 **External (CSV files)**: Indices 1 to N (mathematical standard)
 **Internal (Python/NumPy)**: Indices 0 to N-1 (standard practice)
 
-Conversion happens automatically at I/O boundaries in `matrix_formats.py`.
+Conversion  happens  automatically  at  I/O  boundaries  in  `matrix_formats.py`.
 
 ### Parallelization
 

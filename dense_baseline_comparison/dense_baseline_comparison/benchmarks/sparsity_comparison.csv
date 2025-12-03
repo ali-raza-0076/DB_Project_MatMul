@@ -1,0 +1,5 @@
+Sparsity%,NonZeros,SparseTime(s),DenseTime(s),Speedup,Winner,SparseMem(MB),DenseMem(MB)
+50,393950,0.431168,1.153682,2.68,Sparse,12.01,7.63
+90,95178,0.051782,1.194362,23.07,Sparse,2.90,7.63
+95,48785,0.032250,1.185127,36.75,Sparse,1.49,7.63
+99,9954,0.001419,1.151283,811.12,Sparse,0.30,7.63
