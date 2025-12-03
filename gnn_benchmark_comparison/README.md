@@ -41,7 +41,7 @@ This study evaluates the performance of incremental update algorithms versus ful
 
 ---
 
-## 2. Graph Data Generation Methodology
+## 2. Graph Data Generation
 
 ### 2.1 Sparsity Definition
 
@@ -62,57 +62,43 @@ Where:
 - 99% sparsity → 167,960 edges
 - 99.9% sparsity → 16,795 edges
 
-### 2.2 Vectorized Graph Generation Algorithm
+### 2.2 Graph Generation Algorithm
 
-To efficiently generate large sparse graphs, we employ a vectorized sampling approach:
+We generate sparse graphs using vectorized numpy operations for efficiency:
 
-**Step 1: Calculate Target Edge Count**
+**Step 1: Calculate target edge count based on desired sparsity**
 ```
 num_edges = floor(|V|² × (1 - sparsity/100))
 ```
 
-**Step 2: Oversample to Account for Duplicates**
+**Step 2: Generate random edges with 5% oversampling to account for duplicates**
 ```python
-buffer_factor = 1.05  # 5% oversampling
+buffer_factor = 1.05
 samples_needed = num_edges × buffer_factor
 ```
 
-**Step 3: Batch Random Edge Generation**
+**Step 3: Create random source and target node pairs**
 ```python
 source_nodes = np.random.randint(0, |V|, size=samples_needed)
 target_nodes = np.random.randint(0, |V|, size=samples_needed)
-edges = zip(source_nodes, target_nodes)
 ```
 
-**Step 4: Filter Self-Loops**
-```python
-edges = [(u, v) for (u, v) in edges if u != v]
-```
+**Step 4: Remove self-loops (edges where source equals target)**
 
-**Step 5: Stream to Disk**
+**Step 5: Write edges to CSV in batches of 1,000,000 edges to minimize memory usage**
 
-Edges are written directly to CSV files in 1,000,000-edge batches to minimize memory consumption:
-
-```python
-with open(output_file, 'w') as f:
-    for batch in chunk_edges(edges, batch_size=1_000_000):
-        f.write('\n'.join(f"{u},{v}" for u, v in batch))
-```
-
-**Complexity Analysis**:
-- Time: O(|E|) - linear in edge count
-- Space: O(1) - constant memory footprint (batch streaming)
+This approach achieves O(|E|) time complexity and O(1) space complexity by streaming edges directly to disk rather than storing them in memory.
 
 ---
 
-## 3. Graph Neural Network Implementation
+## 3. Graph Neural Network Operations
 
-### 3.1 GCN Aggregation Operation
+### 3.1 GCN Aggregation
 
-We implement a simplified Graph Convolutional Network (GCN) neighbor aggregation:
+Graph Convolutional Networks perform neighbor aggregation to update node representations:
 
 ```
-H' = aggregate(A, H) = A × H
+H' = aggregate(A, H)
 ```
 
 Where:
@@ -120,34 +106,33 @@ Where:
 - `A` ∈ ℝ^(N×N): Adjacency matrix (graph structure)
 - `H'` ∈ ℝ^(N×D): Aggregated neighbor features
 
+For each node, we sum the features of all its neighbors. This is the fundamental operation in Graph Neural Networks.
+
 ### 3.2 GPU Sparse Representation
 
-Graphs are stored in **Coordinate (COO) format** on GPU:
+Graphs are stored in Coordinate (COO) format on GPU, which explicitly stores only the edges:
 
 ```python
 rows = torch.tensor([source_nodes], dtype=torch.long, device='cuda')
 cols = torch.tensor([target_nodes], dtype=torch.long, device='cuda')
 ```
 
-This representation explicitly stores only the non-zero entries (edges), making it memory-efficient for sparse graphs.
+This representation is memory-efficient for sparse graphs since we only store actual edges, not the entire adjacency matrix.
 
-### 3.3 Efficient Neighbor Aggregation
+### 3.3 Neighbor Aggregation Implementation
 
-PyTorch's `index_add_` operation enables parallel aggregation:
+We use PyTorch's `index_add_` operation to aggregate neighbor features in parallel:
 
 ```python
 aggregated = torch.zeros(num_nodes, feature_dim, device='cuda')
 aggregated.index_add_(dim=0, index=rows, source=features[cols])
 ```
 
-**Mechanism**:
-- For each edge (u, v): `aggregated[u] += features[v]`
-- All edges processed in parallel on GPU
-- Complexity: O(|E|) where |E| is the number of edges
+This operation performs: for each edge (u, v), add features[v] to aggregated[u]. All edges are processed simultaneously on the GPU, resulting in O(|E|) complexity.
 
-### 3.4 GPU Synchronization for Accurate Timing
+### 3.4 GPU Timing Synchronization
 
-CUDA operations are asynchronous by default. To measure true execution time:
+CUDA operations execute asynchronously. To measure accurate execution times, we must wait for all GPU operations to complete:
 
 ```python
 torch.cuda.synchronize()  # Wait for all GPU kernels to complete
@@ -167,14 +152,15 @@ When new edges are added to a graph, the GNN aggregation must be updated. We com
 
 ### 4.2 Full Recomputation Method
 
-**Algorithm**:
+**Algorithm**: When new edges arrive, concatenate them with existing edges and recompute the entire aggregation.
+
 ```python
 def full_recomputation(graph, features, new_edges):
-    # Concatenate new edges with existing edges
+    # Merge new edges with existing graph structure
     updated_rows = concatenate(graph.rows, new_edges.sources)
     updated_cols = concatenate(graph.cols, new_edges.targets)
     
-    # Recompute entire aggregation
+    # Recompute aggregation for all nodes
     aggregated = torch.zeros(num_nodes, feature_dim, device='cuda')
     aggregated.index_add_(0, updated_rows, features[updated_cols])
     
@@ -183,21 +169,18 @@ def full_recomputation(graph, features, new_edges):
 
 **Complexity**: O(|E_total|) where E_total = E_old + E_new
 
-**Characteristics**:
-- Processes all edges (old + new)
-- Requires full graph traversal
-- No overhead for tracking changes
-- Straightforward implementation
+This method processes every edge in the graph (both old and new) to recompute the aggregation. It's straightforward but inefficient when only a few edges are added.
 
 ### 4.3 Incremental Update Method
 
-**Algorithm**:
+**Algorithm**: Start from the previously computed aggregation and add only the contributions from new edges.
+
 ```python
 def incremental_update(graph, features, new_edges, precomputed_aggregation):
-    # Start from previously computed aggregation
+    # Copy the existing aggregation
     updated_aggregation = precomputed_aggregation.clone()
     
-    # Add only contributions from new edges
+    # Add contributions from new edges only
     for (source, target) in new_edges:
         updated_aggregation[source] += features[target]
     
@@ -206,20 +189,16 @@ def incremental_update(graph, features, new_edges, precomputed_aggregation):
 
 **Complexity**: O(|E_new|) where E_new << E_old
 
-**Characteristics**:
-- Processes only new edges
-- Requires maintaining precomputed state
-- Minimal computation for small edge additions
-- Significant speedup when |E_new| << |E_total|
+This method only processes the new edges, significantly reducing computation when adding a small number of edges to a large graph.
 
-### 4.4 Mathematical Justification
+### 4.4 Mathematical Foundation
+
+The incremental update works because matrix operations are associative:
 
 Given:
 - `A_old`: Original adjacency matrix
 - `A_new`: Matrix containing only new edges
 - `H`: Node features
-
-The aggregation can be decomposed:
 
 ```
 H'_updated = (A_old + A_new) × H
@@ -227,71 +206,54 @@ H'_updated = (A_old + A_new) × H
            = H'_precomputed + ΔH
 ```
 
-Where `ΔH` represents the contribution from new edges only. This decomposition enables incremental computation without reprocessing existing edges.
+Where `ΔH` represents only the new contributions. This mathematical property allows us to update the aggregation incrementally without reprocessing existing edges.
 
-### 4.5 Incremental Edge Addition Process
+### 4.5 How Incremental Edge Addition Works
 
-The incremental update algorithm leverages the additive property of matrix multiplication to avoid redundant computation:
+**Initial State**: 
+- Graph has N nodes and E_old edges
+- We have precomputed aggregation: H'_old = A_old × H
 
-**Phase 1: Initial State**
-```
-Given graph G = (V, E_old) with precomputed aggregation:
-  H'_old = Σ_(u,v)∈E_old features[v]  for each node u
-```
+**Adding 3 New Edges**: Suppose we add edges (5 → 10), (5 → 20), (7 → 15)
 
-**Phase 2: New Edge Insertion**
-```
-Add new edges E_new = {(s₁, t₁), (s₂, t₂), (s₃, t₃)}
-Updated graph: G' = (V, E_old ∪ E_new)
-```
+**Full Recomputation Approach**:
+- Process ALL edges: E_old + 3
+- For a graph with 10,498,954 edges, this means processing 10,498,957 edges
 
-**Phase 3: Selective Update**
-```
-For each new edge (source, target):
-  H'_new[source] = H'_old[source] + features[target]
-```
+**Incremental Update Approach**:
+- Process ONLY 3 new edges:
+  - node[5] aggregation += features[10]
+  - node[5] aggregation += features[20]
+  - node[7] aggregation += features[15]
+- Leave all other node aggregations unchanged
 
-**Example with 3 New Edges**:
+**Why This Works**: Only nodes that receive new incoming edges need updates. In our example, only nodes 5 and 7 receive new edges, so only those two nodes need their aggregations updated. The other 9,998 nodes remain unchanged.
 
-Suppose we add edges: (5 → 10), (5 → 20), (7 → 15)
+**Performance Impact**: When adding 3 edges to a 10,498,954-edge graph:
+- Full recomputation: processes 100% of edges
+- Incremental update: processes 0.00003% of edges
+- This explains the observed 27.12× speedup
 
-Traditional full recomputation:
-```
-Process ALL edges: |E_old| + 3
-For 10,498,954 edges: Process 10,498,957 edges
-```
+### 4.6 Benchmark Methodology
 
-Incremental update:
-```
-Process ONLY 3 new edges:
-  node[5] += features[10]
-  node[5] += features[20]
-  node[7] += features[15]
-```
+For each graph configuration (combination of size and sparsity):
 
-This targeted update strategy explains the observed speedup: when |E_new| = 3 and |E_old| = 10,498,954, we process 0.00003% of the edges compared to full recomputation.
+**Initialization**:
+1. Load graph edges from CSV file in COO format
+2. Generate random node features from standard normal distribution
+3. Precompute initial aggregation by summing neighbor features for each node
 
-### 4.6 Benchmark Protocol
+**Benchmarking**:
+1. Randomly sample 3 edges that don't already exist in the graph
+2. Verify edges don't create self-loops
+3. Run 1,000 iterations measuring:
+   - Full recomputation time (add edges + recompute everything)
+   - Incremental update time (add only new edge contributions)
 
-For each graph configuration:
-
-**Initialization Phase**:
-1. Load graph structure from CSV (COO format)
-2. Generate random node features: `H ~ N(0, 1)`
-3. Precompute initial aggregation: `H'_0 = A × H`
-
-**Dynamic Update Phase**:
-1. Sample 3 random edges not in original graph
-2. Ensure no self-loops or duplicate edges
-3. Benchmark both methods over 1,000 iterations:
-   - Full recomputation: Add edges + recompute entire aggregation
-   - Incremental update: Add contributions from new edges only
-
-**Timing Methodology**:
-- Use CUDA synchronization for accurate GPU timing
-- Report mean execution time over 1,000 iterations
-- Measure per-iteration time in milliseconds
-- Calculate speedup ratio: `time_full / time_incremental`
+**Timing**:
+- Use GPU synchronization to ensure accurate measurements
+- Report mean execution time in seconds
+- Calculate speedup ratio: time_full / time_incremental
 
 ---
 
@@ -323,177 +285,124 @@ For each graph configuration:
 <tr><td>graph_10000nodes_99pct_sparsity.csv</td><td>10,000</td><td>104,991</td><td>99.9%</td><td>0.000535</td><td>0.000145</td><td><b>3.69×</b></td></tr>
 </table>
 
-### 5.2 Key Observations
+### 5.2 Analysis
 
-**1. Sparsity Impact on Performance Gains**
+**Sparsity Impact**:
 
 <table>
-<tr><th><b>Sparsity Level</b></th><th><b>Typical Speedup Range</b></th><th><b>Interpretation</b></th></tr>
-<tr><td>90% (Dense)</td><td>7.97× - 27.12×</td><td>Large edge counts amplify incremental advantage</td></tr>
-<tr><td>95% (Moderate)</td><td>6.71× - 21.63×</td><td>Strong performance gains maintained</td></tr>
-<tr><td>99% (Sparse)</td><td>1.56× - 3.90×</td><td>Reduced but consistent advantage</td></tr>
-<tr><td>99.9% (Very Sparse)</td><td>1.12× - 3.69×</td><td>Minimal gains due to small base edge count</td></tr>
+<tr><th><b>Sparsity Level</b></th><th><b>Speedup Range</b></th><th><b>Explanation</b></th></tr>
+<tr><td>90% (Dense)</td><td>7.97× - 27.12×</td><td>Large edge counts make incremental updates highly advantageous. Adding 3 edges to millions means negligible overhead.</td></tr>
+<tr><td>95% (Moderate)</td><td>6.71× - 21.63×</td><td>Still substantial edge counts maintain strong performance gains.</td></tr>
+<tr><td>99% (Sparse)</td><td>1.56× - 3.90×</td><td>Fewer edges reduce the absolute time difference, but incremental still wins.</td></tr>
+<tr><td>99.9% (Very Sparse)</td><td>1.12× - 3.69×</td><td>Minimal edge counts mean both methods are fast, smaller relative gains.</td></tr>
 </table>
 
-**2. Scaling Behavior**
+**Graph Size Scaling**:
 
-Performance improvement increases with graph size:
-- 4,000 nodes: 1.12× - 7.97× speedup
-- 8,000 nodes: 2.84× - 19.83× speedup
-- 10,000 nodes: 3.69× - 27.12× speedup (maximum observed)
+Performance improvement grows with graph size:
+- 4,000 nodes: Maximum 7.97× speedup
+- 8,000 nodes: Maximum 19.83× speedup
+- 10,000 nodes: Maximum 27.12× speedup
 
-This trend demonstrates that incremental updates become increasingly advantageous for larger graphs.
+Larger graphs benefit more from incremental updates because the ratio of new edges to existing edges becomes smaller.
 
-**3. Edge Density Analysis**
+**Maximum Performance Case**:
 
-Maximum speedup (27.12×) achieved with:
+The best speedup (27.12×) occurs with:
 - 10,000 nodes
 - 10,498,954 edges (90% sparsity)
-- Ratio: |E_new| / |E_total| = 3 / 10,498,954 ≈ 0.0000003
+- Adding 3 edges means processing 0.00003% of edges instead of 100%
 
-This extreme ratio explains the substantial performance advantage: incremental update processes only 0.00003% of edges compared to full recomputation.
+### 5.3 Outcome
 
-### 5.3 Winner Determination
-
-**All 12 configurations**: Incremental update outperforms full recomputation
-
-Even in the worst case (4,000 nodes, 99.9% sparsity), incremental update achieves 1.12× speedup, indicating consistent superiority across all tested scenarios.
+All 12 configurations show incremental updates outperform full recomputation. Even in the worst case (4,000 nodes, 99.9% sparsity), incremental updates achieve 1.12× speedup.
 
 ---
 
-## 6. Computational Complexity Analysis
+## 6. Computational Complexity
 
-### 6.1 Theoretical Time Complexity
-
-<table>
-<tr><th><b>Method</b></th><th><b>Time Complexity</b></th><th><b>Description</b></th></tr>
-<tr><td>Full Recomputation</td><td>O(|E_old| + |E_new|)</td><td>Processes all edges in updated graph</td></tr>
-<tr><td>Incremental Update</td><td>O(|E_new|)</td><td>Processes only newly added edges</td></tr>
-</table>
-
-### 6.2 Space Complexity
+### 6.1 Time Complexity Comparison
 
 <table>
-<tr><th><b>Method</b></th><th><b>Space Complexity</b></th><th><b>Additional Memory</b></th></tr>
-<tr><td>Full Recomputation</td><td>O(|E|)</td><td>No extra storage required</td></tr>
-<tr><td>Incremental Update</td><td>O(|E| + |V| × D)</td><td>Must store precomputed aggregation (N × D)</td></tr>
+<tr><th><b>Method</b></th><th><b>Time Complexity</b></th><th><b>Explanation</b></th></tr>
+<tr><td>Full Recomputation</td><td>O(|E_old| + |E_new|)</td><td>Must process every edge in the updated graph</td></tr>
+<tr><td>Incremental Update</td><td>O(|E_new|)</td><td>Only processes newly added edges</td></tr>
 </table>
 
-Where D is the feature dimension (typically 128-512 for GNNs).
+### 6.2 Why Observed Speedup is Less Than Theoretical
 
-### 6.3 Speedup Ratio Derivation
-
-Theoretical speedup:
-
+**Theoretical speedup** for 10,000 nodes, 90% sparsity:
 ```
-Speedup ≈ (|E_old| + |E_new|) / |E_new|
-        ≈ |E_old| / |E_new|  (when |E_new| << |E_old|)
+Speedup_theoretical = |E_old| / |E_new| = 10,498,954 / 3 ≈ 3,499,651×
 ```
 
-For the maximum observed case:
-- |E_old| = 10,498,954
-- |E_new| = 3
-- Theoretical speedup ≈ 3,499,651×
+**Observed speedup**: 27.12×
 
-Observed speedup (27.12×) is significantly lower due to:
-- GPU kernel launch overhead
-- Memory transfer latency
-- Non-aggregation operations (tensor cloning, copying)
+The difference is due to:
+1. **GPU kernel launch overhead**: Starting GPU operations has fixed cost
+2. **Memory operations**: Copying and cloning tensors takes time
+3. **Synchronization costs**: Waiting for GPU operations to complete
+4. **Non-aggregation work**: Setup, validation, result extraction
+
+These overheads are proportionally larger for incremental updates because the actual computation (processing 3 edges) is so small.
 
 ---
 
-## 7. Implementation Details
+## 7. Implementation
 
 ### 7.1 File Structure
 
 ```
 gnn_benchmark_comparison/
-├── README.md                      # This file
-├── generate_graph_data.py         # Graph generation script
-├── gnn_benchmark_dynamic_gpu.py   # Main benchmark implementation
-├── dynamic_gpu_results.json       # Raw benchmark results (JSON)
-├── dynamic_gpu_summary.txt        # Human-readable summary
+├── README.md                      # This documentation
+├── generate_graph_data.py         # Creates test graphs
+├── gnn_benchmark_dynamic_gpu.py   # Benchmark implementation
+├── dynamic_gpu_results.json       # Results in JSON format
+├── dynamic_gpu_summary.txt        # Results in text format
 └── data/                          # Generated graph files
     ├── graph_4000nodes_90pct_sparsity.csv
     ├── graph_4000nodes_95pct_sparsity.csv
-    ├── ...
-    └── graph_10000nodes_99pct_sparsity.csv
+    ├── ... (12 files total)
 ```
 
-### 7.2 Execution Instructions
+### 7.2 Running the Benchmark
 
-**Step 1: Generate Graph Data**
+**Generate graph data**:
 ```bash
 python generate_graph_data.py
 ```
 
-**Step 2: Run Benchmark**
+**Run benchmark**:
 ```bash
 python gnn_benchmark_dynamic_gpu.py
 ```
 
-**Step 3: View Results**
+**View results**:
 ```bash
-# JSON format (machine-readable)
-cat dynamic_gpu_results.json
-
-# Text summary (human-readable)
-cat dynamic_gpu_summary.txt
+cat dynamic_gpu_results.json        # Structured data
+cat dynamic_gpu_summary.txt         # Human-readable summary
 ```
-
-### 7.3 Code Organization
-
-**generate_graph_data.py**:
-- Vectorized graph generation algorithm
-- Configurable node counts and sparsity levels
-- Batch file writing for memory efficiency
-
-**gnn_benchmark_dynamic_gpu.py**:
-- PyTorch GPU implementation
-- Full recomputation benchmark
-- Incremental update benchmark
-- Result aggregation and formatting
 
 ---
 
 ## 8. Conclusion
 
-This study demonstrates that incremental update algorithms provide substantial performance improvements for dynamic graph neural networks across diverse graph sizes and sparsity levels. Key findings:
+Incremental update algorithms demonstrate consistent performance advantages over full recomputation for dynamic graph neural networks:
 
-1. **Consistent Superiority**: Incremental updates outperform full recomputation in all 12 tested configurations
+1. **Universal superiority**: Incremental updates win in all 12 tested configurations
+2. **Maximum speedup**: 27.12× improvement for large, dense graphs
+3. **Scalability**: Performance gains increase with graph size
+4. **Practical value**: Significant speedups even for extremely sparse graphs
 
-2. **Maximum Speedup**: 27.12× improvement observed for large, dense graphs (10,000 nodes, 90% sparsity)
-
-3. **Scalability**: Performance gains increase with graph size, validating the approach for large-scale applications
-
-4. **Practical Applicability**: Even in extreme sparsity scenarios (99.9%), incremental updates maintain competitive performance
-
-The results validate the use of incremental aggregation strategies for real-time dynamic graph applications such as social network analysis, recommendation systems, and temporal graph learning.
+These results validate incremental update strategies for real-time graph learning applications including social networks, recommendation systems, and temporal graph analysis.
 
 ---
 
 ## 9. Reproducibility
 
-All results are reproducible using the provided scripts with fixed random seeds. The benchmark uses:
-- Deterministic PyTorch operations
-- Fixed feature initialization (random seed = 42)
-- Consistent edge sampling methodology
+All experiments are reproducible using the provided scripts. Key factors:
+- Fixed random seeds for deterministic results
 - GPU synchronization for accurate timing
+- Consistent benchmark methodology across all tests
 
-Hardware variations may affect absolute timing values, but relative speedup ratios should remain consistent across CUDA-compatible NVIDIA GPUs.
-
----
-
-## References
-
-**Graph Neural Networks**:
-- Kipf & Welling (2017): "Semi-Supervised Classification with Graph Convolutional Networks"
-- Hamilton et al. (2017): "Inductive Representation Learning on Large Graphs"
-
-**Dynamic Graph Processing**:
-- Ma et al. (2020): "Streaming Graph Neural Networks"
-- Sankar et al. (2020): "DySAT: Deep Neural Representation Learning on Dynamic Graphs"
-
-**GPU Acceleration**:
-- PyTorch Documentation: torch.cuda operations
-- NVIDIA CUDA Programming Guide (v13.0)
+Results may vary slightly on different hardware but relative speedup ratios should remain consistent across CUDA-compatible NVIDIA GPUs.
