@@ -1,0 +1,11 @@
+================================================================================
+SUMMARY: Dynamic Graph Updates on GPU
+================================================================================
+Graph                     Nodes    Edges    Sparsity   Full Recomp (s)  Incremental (s)  Speedup    Winner
+--------------------------------------------------------------------------------
+graph_5000nodes_90pct_sparsity.csv 5000     544350   90.0       0.005427         0.000854         6.36       incremental
+--------------------------------------------------------------------------------
+Maximum tested graph size: 5000 nodes
+Early stopping threshold: 60s per test
+Edges added per update: 3
+Runs per test: 2000

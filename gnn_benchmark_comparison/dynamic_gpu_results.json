@@ -1,0 +1,13 @@
+[
+  {
+    "csv_file": "graph_5000nodes_90pct_sparsity.csv",
+    "num_nodes": 5000,
+    "num_edges": 544350,
+    "sparsity_pct": 90,
+    "edges_added": 3,
+    "full_recomputation_s": 0.005427372599137016,
+    "incremental_update_s": 0.0008535345514537766,
+    "speedup": 6.358702866677023,
+    "winner": "incremental"
+  }
+]

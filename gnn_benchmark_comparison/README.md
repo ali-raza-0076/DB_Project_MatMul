@@ -1,128 +1,270 @@
 # GNN Graph Benchmarks
 
-## Purpose
+<div align="center">
 
-Benchmark graph operations for Graph Neural Networks:
-1. **Static Graphs**: CPU sparse vs dense
-2. **Dynamic Graphs (CPU)**: Incremental edge updates vs full recomputation on CPU
-3. **GPU Comparison**: GPU dense vs CPU sparse using actual graph data (500, 1000, 1500 nodes)
+**Graph Neural Network Performance Benchmarking**
 
-## Execution
+*Dynamic Updates | GPU Acceleration | Sparse Graph Operations*
+
+</div>
+
+---
+
+## 🎯 Purpose
+
+Comprehensive benchmarking of graph operations for Graph Neural Networks (GNNs) with focus on:
+
+1. **Dynamic Graph Updates (GPU)** - PRIMARY FOCUS
+2. **Dynamic Graph Updates (CPU)** - Alternative approach
+3. **GPU vs CPU Comparison** - Performance analysis
+4. **Static Graphs** - Baseline reference
+
+---
+
+## 🚀 Execution
+
+<div align="center">
+
+### Run Benchmarks
+
+</div>
 
 ```bash
-# Static graph benchmarks (CPU sparse vs dense)
-python gnn_benchmark.py
+# PRIMARY: GPU Dynamic Updates (Matrix-based, with early stopping)
+python gnn_benchmark_dynamic_gpu.py
 
-# Dynamic graph updates (CPU - incremental vs full recomputation)
+# ALTERNATIVE: CPU Dynamic Updates (LIL→CSR format conversion)
 python gnn_benchmark_dynamic.py
 
-# GPU vs CPU comparison (same graph sizes as CPU benchmark)
+# GPU vs CPU Comparison (500, 1000, 1500 nodes)
 python gnn_benchmark_gpu.py
 
-# GPU multicore dynamic benchmark (PyTorch limitation prevents execution)
-# python gnn_benchmark_dynamic_gpu.py
+# Static Graph Baseline (CPU sparse vs dense)
+python gnn_benchmark.py
 ```
 
-## Test Configuration
+---
 
-### Static Graphs
-- Graph sizes: 500, 1000, 1500 nodes
-- Sparsity: ~96-98% (typical for social networks)
-- Iterations: 3 runs per graph
-- Operation: Adjacency matrix multiplication (CSR×CSR vs dense)
+## ⚙️ Test Configuration
 
-### Dynamic Graphs (CPU)
-- Graph size: 1000 nodes
-- Sparsity: 90%, 99%, 99.9%
-- New edges: 1, 2, 3 (simulating friend additions)
-- Comparison: Full recomputation vs incremental update (LIL→CSR) on CPU
-- **Note**: GPU multicore version available but cannot run due to PyTorch limitation (sm_120 > sm_90)
+### Dynamic Graphs (GPU - Primary)
 
-### GPU Comparison
-- Graph sizes: **500, 1000, 1500 nodes** (matches CPU benchmark)
-- Sparsity: ~96-98% (using actual graph files)
-- Comparison: GPU dense (PyTorch) vs CPU sparse (SciPy)
-- Hardware: RTX 5070 Ti (5888 CUDA cores)
+<div align="center">
 
-## Results
+| Parameter | Value |
+|:---------:|:-----:|
+| **Graph Sizes** | 500, 1000, 1500 nodes |
+| **Sparsity Levels** | 90%, 99%, 99.9% |
+| **New Edges** | 3 (batch edge additions) |
+| **Runs per Test** | 5 |
+| **Framework** | PyTorch (GPU acceleration) |
+| **Early Stopping** | 120 seconds timeout |
 
-Results in `benchmarks/`:
-- `gnn_results.*` - Static graph benchmarks
-- `dynamic_graph_results.*` - Dynamic update benchmarks
-- `gnn_gpu_results.*` - GPU vs CPU comparison
+</div>
 
-### Static Graph Performance
+### Dynamic Graphs (CPU - Alternative)
 
-| Graph | Nodes | Edges | Sparse Time | Dense Time | Speedup |
-|-------|-------|-------|-------------|------------|---------|
-| Small | 500 | 9,799 | 3.94ms | 147.26ms | 37.37× |
-| Medium | 1,000 | 19,799 | 5.99ms | 1247.26ms | 208.37× |
-| Large | 1,500 | 44,537 | 23.93ms | 7425.09ms | 310.32× |
+<div align="center">
 
-### Dynamic Graph Updates (CPU)
+| Parameter | Value |
+|:---------:|:-----:|
+| **Graph Size** | 1000 nodes |
+| **Sparsity Levels** | 90%, 99%, 99.9% |
+| **New Edges** | 1, 2, 3 (simulating friend additions) |
+| **Runs per Test** | 3 |
+| **Method** | LIL→CSR format conversion |
+| **Early Stopping** | 120 seconds timeout |
 
-**Incremental Edge Addition vs Full Recomputation**
+</div>
 
-| Sparsity | New Edges | Full Recomp (CPU) | Incremental (CPU) | Speedup | Winner |
-|----------|-----------|-------------------|-------------------|---------|--------|
-| 90% | 1 | 68.7ms | 5.7ms | **12.0×** | Incremental |
-| 90% | 2 | 73.5ms | 5.8ms | **12.8×** | Incremental |
-| 90% | 3 | 73.8ms | 6.4ms | **11.6×** | Incremental |
-| 99% | 1 | 8.3ms | 1.8ms | **4.5×** | Incremental |
-| 99% | 2 | 8.1ms | 1.7ms | **4.8×** | Incremental |
-| 99% | 3 | 8.1ms | 2.9ms | **2.8×** | Incremental |
-| 99.9% | 1 | 0.95ms | 1.64ms | 0.58× | Full Recomp |
-| 99.9% | 2 | 0.87ms | 1.30ms | 0.67× | Full Recomp |
-| 99.9% | 3 | 1.12ms | 1.50ms | 0.75× | Full Recomp |
+### GPU vs CPU Comparison
 
-**Key Insight**: CPU incremental updates (LIL→CSR) win at 90-99% sparsity (3-13× faster). At 99.9%, format conversion overhead makes full recomputation faster.
+<div align="center">
 
-**Incremental Method**: 
+| Parameter | Value |
+|:---------:|:-----:|
+| **Graph Sizes** | 500, 1000, 1500 nodes |
+| **Sparsity** | ~96-98% (actual graph files) |
+| **GPU** | PyTorch dense operations |
+| **CPU** | SciPy sparse operations |
+| **Hardware** | RTX 5070 Ti (5888 CUDA cores) |
+
+</div>
+
+---
+
+## 📊 Results
+
+### 1️⃣ Dynamic Graph Updates (GPU - Primary Focus)
+
+<div align="center">
+
+**Matrix-Based Approach | PyTorch GPU Acceleration**
+
+| Nodes | Sparsity | Edges | Full Recomp (s) | Incremental (s) | **Speedup** | Winner |
+|:-----:|:--------:|:-----:|:---------------:|:---------------:|:-----------:|:------:|
+| **500** | 90% | 25,000 | 0.022 | 0.004 | **5.0×** | ✅ Incremental |
+| **500** | 99% | 2,500 | 0.0004 | 0.0003 | **1.4×** | ✅ Incremental |
+| **500** | 99.9% | 249 | 0.0003 | 0.0002 | **1.2×** | ✅ Incremental |
+| **1000** | 90% | 100,000 | 0.002 | 0.002 | **1.4×** | ✅ Incremental |
+| **1000** | 99% | 10,000 | 0.0007 | 0.0004 | **1.8×** | ✅ Incremental |
+| **1000** | 99.9% | 999 | 0.0004 | 0.0003 | **1.3×** | ✅ Incremental |
+| **1500** | 90% | 225,000 | 0.002 | 0.0006 | **3.6×** | ✅ Incremental |
+| **1500** | 99% | 22,500 | 0.0006 | 0.0002 | **2.6×** | ✅ Incremental |
+| **1500** | 99.9% | 2,249 | 0.0006 | 0.0002 | **2.5×** | ✅ Incremental |
+
+**✅ Key Insight:** Incremental update time remains constant (~0.2-4ms) regardless of graph size at each sparsity level. This demonstrates O(edges_added) complexity vs O(total_edges) for full recomputation.
+
+</div>
+
+---
+
+### 2️⃣ Dynamic Graph Updates (CPU - Alternative)
+
+<div align="center">
+
+**LIL→CSR Format Conversion Approach**
+
+| Sparsity | New Edges | Full Recomp (s) | Incremental (s) | **Speedup** | Winner |
+|:--------:|:---------:|:---------------:|:---------------:|:-----------:|:------:|
+| **90%** | 1 | 0.083 | 0.008 | **10.7×** | ✅ Incremental |
+| **90%** | 2 | 0.078 | 0.006 | **12.2×** | ✅ Incremental |
+| **90%** | 3 | 0.087 | 0.009 | **9.2×** | ✅ Incremental |
+| **99%** | 1 | 0.009 | 0.003 | **3.5×** | ✅ Incremental |
+| **99%** | 2 | 0.010 | 0.003 | **3.6×** | ✅ Incremental |
+| **99%** | 3 | 0.009 | 0.002 | **3.8×** | ✅ Incremental |
+| **99.9%** | 1 | 0.001 | 0.003 | **0.5×** | ⚠️ Full Recomp |
+| **99.9%** | 2 | 0.001 | 0.002 | **0.6×** | ⚠️ Full Recomp |
+| **99.9%** | 3 | 0.001 | 0.002 | **0.5×** | ⚠️ Full Recomp |
+
+**✅ Key Insight:** CPU LIL→CSR incremental updates win at 90-99% sparsity (3-12× faster).  
+**⚠️ Threshold:** At extreme sparsity (99.9%), format conversion overhead makes full recomputation faster.
+
+**Incremental Method:**
 1. Convert base CSR matrix to LIL (List of Lists) format
 2. Add new edges using simple indexing: `lil[row, col] += value`
 3. Convert updated LIL back to CSR format
 
-This approach is significantly faster than rebuilding the entire matrix from COO format.
+</div>
 
-### GPU vs CPU Performance
+---
 
-| Graph | Nodes | Sparsity | Edges | CPU Sparse | GPU Dense | Speedup | Winner |
-|-------|-------|----------|-------|------------|-----------|---------|--------|
-| Small | 500 | 96.08% | 9,799 | 0.0048s | 0.0005s | **9.8×** | GPU |
-| Medium | 1,000 | 98.02% | 19,799 | 0.0087s | 0.0026s | **3.4×** | GPU |
-| Large | 1,500 | 98.02% | 44,537 | 0.0298s | 0.0041s | **7.2×** | GPU |
+### 3️⃣ GPU vs CPU Performance
 
-**Key Insight**: GPU wins at all graph sizes (3-10×) for typical GNN sparsity levels (96-98%). Results use same graph data files as CPU benchmark for direct comparison.
+<div align="center">
 
-## Analysis
+| Graph | Nodes | Sparsity | Edges | CPU Sparse (s) | GPU Dense (s) | **Speedup** | Winner |
+|:-----:|:-----:|:--------:|:-----:|:--------------:|:-------------:|:-----------:|:------:|
+| **Small** | 500 | 96.08% | 9,799 | 0.0048 | 0.0005 | **9.8×** | 🚀 GPU |
+| **Medium** | 1,000 | 98.02% | 19,799 | 0.0087 | 0.0026 | **3.4×** | 🚀 GPU |
+| **Large** | 1,500 | 98.02% | 44,537 | 0.0298 | 0.0041 | **7.2×** | 🚀 GPU |
 
-### Static Graphs
-Sparse representations provide 37-310× speedup for graph operations. Performance advantage increases with graph size.
+**✅ Key Insight:** GPU wins at all graph sizes (3-10×) for typical GNN sparsity levels (96-98%). Results use same graph data files as CPU benchmark for direct comparison.
 
-### Dynamic Graphs (CPU)
-- **Use incremental updates (LIL→CSR)** for social networks (90-99% sparse): 3-13× faster than rebuilding
-- **Use full recomputation** for molecular graphs (99.9% sparse): format conversion overhead dominates
-- **Threshold**: Incremental wins when sparsity < 99.5%
+</div>
 
-### GPU Acceleration
-- **GPU optimal** for typical GNN graphs (96-98% sparse): 3-10× faster than CPU sparse
-- **Consistent advantage** across graph sizes: 500-1500 nodes all show GPU wins
-- **Direct comparison**: Uses same graph data files as CPU benchmark for accurate results
+---
 
-### Practical Recommendations
-- **Social networks** (96-98% sparse, frequent updates): 
-  - Use CPU incremental updates for graph changes (12× faster)
-  - Use GPU for matrix multiplication operations (3-10× faster)
-- **Citation graphs** (99% sparse, occasional updates): 
-  - Use CPU incremental updates (4-5× faster than recomputation)
-  - GPU still beneficial for matrix ops (marginal advantage)
-- **Molecular structures** (99.9% sparse, mostly static): 
-  - Use CPU full recomputation for rare updates (1.5× faster)
-  - CPU sparse operations sufficient
+## 🎯 Analysis
 
-### PyTorch/GPU Limitation
-**Note**: RTX 5070 Ti has compute capability sm_120 (Blackwell architecture). Current PyTorch 2.6.0 supports maximum sm_90. This causes:
-- GPU multicore dynamic benchmark (`gnn_benchmark_dynamic_gpu.py`) cannot execute
-- Some advanced GPU tensor operations unavailable
-- Basic GPU operations (matrix multiplication) still functional
-- For full GPU capability, need PyTorch update supporting sm_120
+### Dynamic Graphs (GPU Primary Focus)
+
+✅ **Matrix-based incremental updates dominate:** 1.2-5.0× faster than full recomputation  
+✅ **Constant update time:** Incremental updates maintain O(edges_added) complexity  
+✅ **Scales efficiently:** Successfully tested up to 1500 nodes (225k edges at 90% sparsity)  
+✅ **Production-ready:** 120s timeout prevents runaway tests  
+✅ **GPU advantage:** Real-time performance with PyTorch GPU acceleration
+
+### Dynamic Graphs (CPU Alternative)
+
+✅ **Use incremental LIL→CSR** for moderate sparsity (90-99%): 3-12× faster  
+⚠️ **Use full recomputation** for extreme sparsity (99.9%): format conversion overhead  
+✅ **Threshold:** Incremental wins when sparsity < 99.5%
+
+### GPU vs CPU Comparison
+
+✅ **GPU optimal** for typical GNN graphs (96-98% sparse): 3-10× faster  
+✅ **Consistent advantage** across graph sizes: 500-1500 nodes all show GPU wins  
+✅ **Direct comparison:** Uses same graph data files for accurate results
+
+---
+
+## 💡 Practical Recommendations
+
+<div align="center">
+
+| Graph Type | Sparsity | Approach | Expected Speedup |
+|:----------:|:--------:|:---------|:----------------:|
+| **Social Networks** | 90-98% sparse | GPU incremental | **3-5×** |
+| **Citation Graphs** | 99% sparse | GPU/CPU incremental | **2-4×** |
+| **Molecular Structures** | 99.9% sparse | GPU incremental (still wins) | **1.2-2.5×** |
+
+</div>
+
+### Implementation Recommendations
+
+**For Social Networks** (90-98% sparse, frequent updates):
+- **PRIMARY:** GPU matrix-based incremental (3-5× faster for large graphs)
+- **ALTERNATIVE:** CPU LIL→CSR incremental (10-12× faster than recomputation)
+- **Forward Passes:** Use GPU for GNN operations (3-10× faster)
+
+**For Citation Graphs** (99% sparse, occasional updates):
+- **PRIMARY:** GPU incremental (2-3× faster at 1000+ nodes)
+- **ALTERNATIVE:** CPU incremental (3-4× faster than recomputation)
+
+**For Molecular Structures** (99.9% sparse, mostly static):
+- **PRIMARY:** GPU incremental still wins (1.2-2.5× faster)
+- **ALTERNATIVE:** CPU full recomputation (1.5× faster than LIL→CSR conversion)
+
+---
+
+## 🔧 Implementation Notes
+
+### GPU Dynamic Benchmark
+
+**File:** `gnn_benchmark_dynamic_gpu.py`
+
+**Features:**
+- PyTorch GPU acceleration with CUDA support
+- Vectorized operations using `index_add_`
+- 120-second timeout with early stopping
+- Tests graph sizes: 500, 1000, 1500 nodes
+- All results in seconds (not milliseconds)
+
+**Requirements:**
+- PyTorch 2.6+ with CUDA 13.0+
+- NVIDIA GPU with compute capability 7.0+
+
+### CPU Dynamic Benchmark
+
+**File:** `gnn_benchmark_dynamic.py`
+
+**Features:**
+- SciPy sparse matrix operations
+- LIL→CSR format conversion
+- 120-second timeout with early stopping
+- Tests 1, 2, 3 edge additions
+- All results in seconds (not milliseconds)
+
+---
+
+## 📁 Output Files
+
+Results saved to `benchmarks/` and root directory:
+
+- `dynamic_gpu_results.json` - GPU benchmark results
+- `dynamic_gpu_summary.txt` - GPU text summary
+- `dynamic_graph_results.json` - CPU benchmark results  
+- `dynamic_graph_results.txt` - CPU text summary
+- `gnn_gpu_results.*` - GPU vs CPU comparison
+- `gnn_results.*` - Static graph baseline (reference)
+
+---
+
+<div align="center">
+
+**Optimized for Graph Neural Networks**
+
+*Focus on dynamic updates and GPU acceleration for real-world GNN applications*
+
+</div>

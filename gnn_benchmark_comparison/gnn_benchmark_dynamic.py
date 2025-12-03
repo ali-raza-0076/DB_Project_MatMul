@@ -15,6 +15,9 @@ import json
 from tabulate import tabulate
 from tqdm import tqdm
 
+# Timeout threshold in seconds (2 minutes per test)
+TIMEOUT_SECONDS = 120
+
 def create_base_graph(num_nodes, sparsity_percent, seed=42):
     """
     Create base graph adjacency matrix with specified sparsity.
@@ -106,6 +109,7 @@ def benchmark_multiplication(A, B, num_runs=3):
 def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num_runs=3):
     """
     Test dynamic graph updates with varying numbers of new edges (CPU).
+    Returns None if timeout exceeded.
     
     Args:
         num_nodes: Graph size
@@ -114,8 +118,10 @@ def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num
         num_runs: Benchmark repetitions
     
     Returns:
-        Results dictionary
+        Results dictionary or None if timeout
     """
+    test_start_time = time.perf_counter()
+    
     print(f"\n{'='*80}")
     print(f"Dynamic Graph Update Test (CPU): {num_nodes} nodes, {sparsity_percent}% sparse")
     print(f"{'='*80}")
@@ -126,6 +132,11 @@ def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num
     base_nnz = base_graph.nnz
     actual_sparsity = 100 * (1 - base_nnz / (num_nodes * num_nodes))
     print(f"Base graph: {base_nnz:,} edges ({actual_sparsity:.4f}% sparse)")
+    
+    # Check timeout
+    if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
+        print(f"  WARNING: Test initialization exceeded timeout")
+        return None
     
     results = []
     
@@ -141,11 +152,20 @@ def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num
             for _ in range(num_new_edges)
         ]
         
+        # Check timeout before starting tests
+        if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
+            print(f"  WARNING: Test exceeded timeout before testing {num_new_edges} edges")
+            return None
+        
         # Test full recomputation
         recomp_times = []
         for _ in tqdm(range(num_runs), desc="  Full Recomputation", leave=False):
             _, t = add_edges_full_recomputation(base_graph, new_edges)
             recomp_times.append(t)
+            # Check timeout
+            if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
+                print(f"  WARNING: Test exceeded timeout during full recomputation")
+                return None
         recomp_avg = np.mean(recomp_times)
         recomp_std = np.std(recomp_times)
         
@@ -154,22 +174,26 @@ def test_dynamic_updates(num_nodes, sparsity_percent, edge_counts=[1, 2, 3], num
         for _ in tqdm(range(num_runs), desc="  Incremental Update", leave=False):
             _, t = add_edges_incremental(base_graph, new_edges)
             incr_times.append(t)
+            # Check timeout
+            if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
+                print(f"  WARNING: Test exceeded timeout during incremental update")
+                return None
         incr_avg = np.mean(incr_times)
         incr_std = np.std(incr_times)
         
         speedup = recomp_avg / incr_avg if incr_avg > 0 else 0
         winner = "Incremental" if speedup > 1 else "Full Recomp"
         
-        print(f"Full Recomputation: {recomp_avg*1000:.6f}ms ± {recomp_std*1000:.6f}ms")
-        print(f"Incremental Update: {incr_avg*1000:.6f}ms ± {incr_std*1000:.6f}ms")
+        print(f"Full Recomputation: {recomp_avg:.6f}s ± {recomp_std:.6f}s")
+        print(f"Incremental Update: {incr_avg:.6f}s ± {incr_std:.6f}s")
         print(f"Speedup: {speedup:.2f}× ({winner} wins)")
         
         results.append({
             "num_new_edges": num_new_edges,
-            "full_recomputation_ms": recomp_avg * 1000,
-            "full_recomputation_std_ms": recomp_std * 1000,
-            "incremental_update_ms": incr_avg * 1000,
-            "incremental_update_std_ms": incr_std * 1000,
+            "full_recomputation_s": recomp_avg,
+            "full_recomputation_std_s": recomp_std,
+            "incremental_update_s": incr_avg,
+            "incremental_update_std_s": incr_std,
             "speedup": speedup,
             "winner": winner
         })
@@ -186,6 +210,7 @@ def main():
     print("="*80)
     print("GNN DYNAMIC GRAPH BENCHMARK - CPU")
     print("Incremental Edge Addition vs Full Recomputation (CPU)")
+    print(f"Early Stopping: {TIMEOUT_SECONDS}s per test")
     print("="*80)
     
     # Test configurations: super sparse
@@ -205,6 +230,10 @@ def main():
             edge_counts=[1, 2, 3],
             num_runs=num_runs
         )
+        # Skip if timeout occurred
+        if result is None:
+            print(f"Skipping {config['nodes']} nodes, {config['sparsity']}% sparsity due to timeout")
+            continue
         all_results.append(result)
     
     # Generate summary table
@@ -220,8 +249,8 @@ def main():
         for r in res['results']:
             table_data.append([
                 r['num_new_edges'],
-                f"{r['full_recomputation_ms']:.6f}ms",
-                f"{r['incremental_update_ms']:.6f}ms",
+                f"{r['full_recomputation_s']:.6f}s",
+                f"{r['incremental_update_s']:.6f}s",
                 f"{r['speedup']:.2f}×",
                 r['winner']
             ])
@@ -249,8 +278,8 @@ def main():
             for r in res['results']:
                 table_data.append([
                     r['num_new_edges'],
-                    f"{r['full_recomputation_ms']:.6f}ms",
-                    f"{r['incremental_update_ms']:.6f}ms",
+                    f"{r['full_recomputation_s']:.6f}s",
+                    f"{r['incremental_update_s']:.6f}s",
                     f"{r['speedup']:.2f}×",
                     r['winner']
                 ])
