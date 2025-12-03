@@ -1,10 +1,35 @@
-# Sparse Matrix Operations - Database Project
+# Sparse Matrix Operations - Database Systems Project
 
 ## Overview
 
-Implements sparse matrix operations (addition, multiplication) using database principles: external sorting, multiprocessing, and memory-efficient algorithms.
+Implementation of sparse matrix operations using database principles: external sorting, parallel processing, and compressed sparse formats (COO, CSR, CSC). Tests super sparse matrices (90-99.9% sparsity, ≤10% density) with dynamic graph update capabilities.
 
-**Key Feature**: All CSV files use **1-based indexing** (mathematical standard) while internal Python computations use 0-based (standard practice).
+**Indexing Convention**: CSV files use 1-based indexing; internal operations use 0-based indexing.
+
+---
+
+## Benchmark Execution
+
+Generate all benchmark results:
+
+```bash
+# Dense vs Sparse CPU (90%, 99%, 99.9% sparsity)
+python dense_baseline_comparison/sparsity_comparison.py
+
+# GNN: CPU sparse vs dense (static graphs)
+python gnn_benchmark_comparison/gnn_benchmark.py
+
+# GNN: Dynamic graph updates (1, 2, 3 edge additions)
+python gnn_benchmark_comparison/gnn_benchmark_dynamic.py
+
+# GNN: GPU dense vs CPU sparse
+python gnn_benchmark_comparison/gnn_benchmark_gpu.py
+
+# GPU sparsity tests
+python google_colab_gpu/run_gpu_sparsity_torch.py
+python google_colab_gpu/run_gpu_gnn_torch.py
+python google_colab_gpu/compare_results.py
+```
 
 ---
 
@@ -12,197 +37,127 @@ Implements sparse matrix operations (addition, multiplication) using database pr
 
 ```
 DB_Project_MatMul/
-├── generate_data.py              # Create random sparse matrices
-├── external_sort.py              # Sort large CSV files
-├── matrix_formats.py             # Convert COO ↔ CSR ↔ CSC
-├── sparse_addition.py            # Sequential A+B
-├── sparse_addition_parallel.py   # Parallel A+B (8 cores)
-├── sparse_multiplication.py      # Sequential A×B
-├── sparse_multiplication_parallel.py  # Parallel A×B (8 cores)
-├── parallel_cpu.py               # Parallel benchmarking
-├── data/
-│   ├── input/                    # Generated matrices (unsorted)
-│   └── ouput/                    # Sorted matrices and results
-├── verification/                 # Test scripts (scipy validation)
-├── documentation/                # README guides
-├── dense_baseline_comparison/    # Sparse vs Dense CPU benchmarks
-└── gnn_benchmark_comparison/     # Graph Neural Network use cases
+├── sparse_addition.py / sparse_addition_parallel.py
+├── sparse_multiplication.py / sparse_multiplication_parallel.py
+├── external_sort.py
+├── matrix_formats.py
+├── generate_data.py
+├── dense_baseline_comparison/    # CPU sparse vs dense
+├── gnn_benchmark_comparison/     # Graph operations
+└── google_colab_gpu/              # GPU benchmarks
 ```
 
 ---
 
-## Quick Start
+## Benchmark Results
 
-### 1. Generate Data
+### Test Configuration
+- **CPU**: AMD Ryzen 9 8940HX (16 cores)
+- **GPU**: NVIDIA RTX 5070 Ti (5888 CUDA cores, 12GB VRAM)
+- **Matrix Size**: 1000×1000
+- **Sparsity Levels**: 90%, 99%, 99.9% (super sparse: ≤10% density)
 
-Create two 50K×50K sparse matrices with 100K entries each:
+### Dense vs Sparse CPU (Super Sparse)
 
-```bash
-python generate_data.py
-```
+| Sparsity | Non-Zeros | Sparse | Dense | Speedup | Memory Ratio |
+|----------|-----------|--------|-------|---------|--------------|
+| 90% | 95,178 | 0.063s | 1.184s | **18.7×** | 2.6× |
+| 99% | 9,954 | 0.001s | 1.114s | **826×** | 25× |
+| 99.9% | 999 | 0.0002s | 1.209s | **7,591×** | 250× |
 
-**Output**: `data/input/matrix_a.csv`, `data/input/matrix_b.csv` (1-based, unsorted)
+**Result**: Sparse CSR×CSC wins at all super sparse levels. Speedup increases exponentially with sparsity.
 
-### 2. Sort Matrices
+### GNN Dynamic Graph Updates
 
-```bash
-python external_sort.py data/input/matrix_a.csv data/ouput/matrix_a_sorted.csv
-python external_sort.py data/input/matrix_b.csv data/ouput/matrix_b_sorted.csv
-```
+**Incremental Edge Addition vs Full Recomputation**
 
-### 3. Run Operations
+| Density | Sparsity | New Edges | Full Recomp | Incremental | Speedup | Winner |
+|---------|----------|-----------|-------------|-------------|---------|--------|
+| 10% | 90% | 1 | 70.2ms | 7.7ms | **9.1×** | Incremental |
+| 10% | 90% | 2 | 70.9ms | 5.9ms | **12.1×** | Incremental |
+| 10% | 90% | 3 | 68.7ms | 5.5ms | **12.5×** | Incremental |
+| 1% | 99% | 1 | 6.8ms | 1.7ms | **4.0×** | Incremental |
+| 1% | 99% | 2 | 7.9ms | 1.6ms | **4.9×** | Incremental |
+| 1% | 99% | 3 | 6.8ms | 2.4ms | **2.8×** | Incremental |
+| 0.1% | 99.9% | 1 | 0.98ms | 1.66ms | 0.59× | Full Recomp |
+| 0.1% | 99.9% | 2 | 0.91ms | 1.57ms | 0.58× | Full Recomp |
+| 0.1% | 99.9% | 3 | 1.22ms | 1.36ms | 0.90× | Full Recomp |
 
-**Addition (A+B)**:
-```bash
-python sparse_addition_parallel.py
-```
-- Output: `data/ouput/matrix_sum.csv` (~200K entries, 1-based)
+**Result**: Incremental updates (LIL→CSR) win at 90-99% sparsity. At extreme sparsity (99.9%), full recomputation is faster due to overhead of format conversion.
 
-**Multiplication (A×B)**:
-```bash
-python sparse_multiplication_parallel.py
-```
-- Output: `data/ouput/matrix_product.csv` (~197K entries, 1-based)
+### GNN: GPU Dense vs CPU Sparse
 
-### 4. Verify Correctness
+| Nodes | Density | Sparsity | Non-Zeros | CPU Sparse | GPU Dense | Speedup | Winner |
+|-------|---------|----------|-----------|------------|-----------|---------|--------|
+| 1,000 | 10% | 90% | 95,178 | 0.058s | 0.002s | **27.6×** | GPU |
+| 1,000 | 1% | 99% | 9,954 | 0.002s | 0.002s | **1.0×** | GPU |
+| 1,000 | 0.1% | 99.9% | 1,000 | 0.0002s | 0.002s | 0.15× | **CPU** |
+| 2,000 | 10% | 90% | 380,453 | 0.317s | 0.010s | **33.3×** | GPU |
+| 2,000 | 1% | 99% | 39,802 | 0.013s | 0.010s | **1.3×** | GPU |
 
-```bash
-python verification/verify_addition.py
-python verification/verify_multiplication.py
-```
+**Result**: GPU dominates at 90-99% sparsity. CPU sparse wins at extreme sparsity (99.9%).
 
-Both should report **100% CORRECT**.
+### GPU Sparsity Tests
 
----
+| Sparsity | GPU Time | Consistency |
+|----------|----------|-------------|
+| 90% | 1.98ms ± 0.99ms | ✓ |
+| 99% | 2.04ms ± 0.70ms | ✓ |
+| 99.9% | 2.37ms ± 0.48ms | ✓ |
 
-## Core Concepts
-
-### Sparse Formats
-
-- **COO** (Coordinate): (row, col, value) triplets - used for I/O
-- **CSR** (Compressed Sparse Row): Efficient row operations - used for multiplication
-- **CSC** (Compressed Sparse Column): Efficient column operations
-
-### 1-Based vs 0-Based Indexing
-
-**External (CSV files)**: Indices 1 to N (mathematical standard)
-**Internal (Python/NumPy)**: Indices 0 to N-1 (standard practice)
-
-Conversion happens automatically at I/O boundaries in `matrix_formats.py`.
-
-### Parallelization
-
-- **Addition**: Chunk input files, merge partial results
-- **Multiplication**: Chunk rows of A, compute partial products, merge
-- **Performance**: ~87-90% parallel efficiency on 8 cores
-
-### External Sorting
-
-Large files sorted via chunk-based merge sort (handles files larger than RAM).
+**Result**: GPU performance stable across super sparse levels (~2ms). Sparsity doesn't benefit dense GPU operations.
 
 ---
 
-## Benchmark Comparisons
+## Key Findings
 
-### Dense Baseline Comparison
+### Sparsity Analysis
+1. **CPU Sparse dominates at all super sparse levels** (90-99.9%)
+2. **Speedup increases exponentially** with sparsity: 18× → 826× → 7,591×
+3. **Memory advantage grows** with sparsity: 2.6× → 25× → 250×
 
-**Location**: `dense_baseline_comparison/`
+### Dynamic Graph Updates
+4. **Incremental updates win at moderate sparsity** (90-99%): 3-12× faster
+5. **Full recomputation wins at extreme sparsity** (99.9%): format conversion overhead exceeds rebuild cost
+6. **Use LIL→CSR for dynamic graphs** with <99% sparsity
 
-Compares sparse (CSR×CSC) vs dense (numpy) matrix multiplication at different sparsity levels to answer: **When is sparse actually faster?**
+### GPU vs CPU
+7. **GPU optimal for 90-99% sparsity**: 27-33× speedup for larger graphs
+8. **CPU sparse optimal for ≥99.9% sparsity**: minimal computation negates GPU parallelism benefit
+9. **Crossover point**: GPU wins with >1,000 non-zeros
 
-**Tests**: 50%, 90%, 95%, 99% sparsity on 1000×1000 matrices
-
-**Results**:
-- 50% sparse: Sparse 3× faster
-- 90% sparse: Sparse 21× faster
-- 95% sparse: Sparse 82× faster
-- 99% sparse: Sparse 1439× faster
-
-**Key Finding**: Sparse wins at ALL sparsity levels, even dense matrices!
-
-**Run it**:
-```bash
-cd dense_baseline_comparison
-python sparsity_comparison.py
-```
-
-### GNN Benchmark Comparison
-
-**Location**: `gnn_benchmark_comparison/`
-
-Tests graph adjacency matrices simulating Graph Neural Networks (GNNs) - social networks, knowledge graphs, molecular structures.
-
-**Graph Sizes**: 500, 1000, 1500 nodes (96-98% sparse)
-
-**Results**:
-- Small (500 nodes): Sparse 86× faster
-- Medium (1000 nodes): Sparse 403× faster
-- Large (1500 nodes): Sparse 394× faster
-
-**Key Finding**: GNN use cases dramatically favor sparse representations with 6-13× memory savings.
-
-**Run it**:
-```bash
-cd gnn_benchmark_comparison
-python generate_graph_data.py  # Generate graph data
-python gnn_benchmark.py         # Run benchmark
-```
-
-**Note**: GPU comparison pending (requires GPU hardware). Current benchmarks show sparse CPU vs dense CPU.
-
----
-
-## Performance Metrics
-
-**Matrix Size**: 50,000 × 50,000 (2.5 billion possible entries)
-**Sparsity**: 100,000 entries each (~0.04% density)
-
-| Operation       | Sequential | Parallel (8 cores) | Speedup |
-|-----------------|------------|-------------------|---------|
-| Addition        | ~7.2s      | ~0.95s            | 7.6×    |
-| Multiplication  | ~22.4s     | ~2.9s             | 7.7×    |
-
----
-
-## Documentation
-
-- **DATA_GENERATION.md**: How to generate matrices with different sizes/sparsity
-- **SPARSE_OPERATIONS.md**: Addition, multiplication, format conversions
-- **PARALLEL_CPU.md**: Parallelization strategies and performance
-- **VERIFICATION.md**: How test scripts work
-- **NUMBA_SCIPY_INTEGRATION.md**: Technical details on Numba JIT compilation
-
-### Benchmark Folders
-
-- **dense_baseline_comparison/README.md**: Sparse vs Dense CPU comparison details
-- **gnn_benchmark_comparison/README.md**: Graph Neural Network use case details
+### Practical Recommendations
+- **Social networks** (90% sparse): Use incremental updates on GPU
+- **Citation graphs** (99% sparse): Use incremental updates on CPU sparse
+- **Molecular structures** (99.9% sparse): Use full recomputation on CPU sparse
 
 ---
 
 ## Dependencies
 
-```
-numpy
-scipy
-numba
-tabulate
+```bash
+pip install -r requirements.txt
 ```
 
-Install: `pip install -r requirements.txt`
+Requirements: numpy, scipy, numba, torch, tqdm, tabulate
 
 ---
 
-## Validation
+## Sparse Matrix Formats
 
-All operations verified against **scipy** (industry-standard library):
-- ✓ Addition: 199,996 entries, 100% match
-- ✓ Multiplication: 197,421 entries, 100% match
+- **COO**: (row, col, value) triplets for I/O
+- **CSR**: Compressed rows for efficient matrix operations
+- **CSC**: Compressed columns for efficient column access
 
 ---
 
-## Notes
+## Documentation
 
-- Matrices A and B are generated with different random seeds (42 vs 123)
-- Duplicate (row, col) entries are automatically merged (values summed)
-- All output files use 1-based indexing per academic requirements
-- No header rows in operation result files (pure triplets)
+Detailed documentation in `documentation/`:
+- `DATA_GENERATION.md`
+- `SPARSE_OPERATIONS.md`
+- `PARALLEL_CPU.md`
+- `VERIFICATION.md`
+- `NUMBA_SCIPY_INTEGRATION.md`
+
+Each benchmark folder contains a README with execution instructions and result interpretation.

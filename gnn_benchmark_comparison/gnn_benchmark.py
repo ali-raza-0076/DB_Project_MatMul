@@ -9,6 +9,7 @@ import csv
 import os
 from tabulate import tabulate
 import json
+from tqdm import tqdm
 
 def load_graph_matrix(filepath, num_nodes):
     """
@@ -42,7 +43,7 @@ def load_graph_matrix(filepath, num_nodes):
 def benchmark_sparse_multiplication(A_sparse, B_sparse, num_runs=3):
     """Benchmark sparse CSR × CSR multiplication."""
     times = []
-    for _ in range(num_runs):
+    for _ in tqdm(range(num_runs), desc="  Sparse CPU", leave=False):
         start = time.perf_counter()
         result = A_sparse @ B_sparse
         end = time.perf_counter()
@@ -55,7 +56,7 @@ def benchmark_sparse_multiplication(A_sparse, B_sparse, num_runs=3):
 def benchmark_dense_multiplication(A_dense, B_dense, num_runs=3):
     """Benchmark dense numpy matrix multiplication."""
     times = []
-    for _ in range(num_runs):
+    for _ in tqdm(range(num_runs), desc="  Dense CPU", leave=False):
         start = time.perf_counter()
         result = np.matmul(A_dense, B_dense)
         end = time.perf_counter()
@@ -187,7 +188,7 @@ def main():
     
     # Run benchmarks
     results = []
-    for graph in graphs:
+    for graph in tqdm(graphs, desc="Running GNN Benchmarks", unit="graph"):
         result = run_gnn_benchmark(
             graph["name"],
             graph["nodes"],

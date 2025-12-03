@@ -1,62 +1,42 @@
-# Dense Baseline Comparison
+# Dense vs Sparse CPU Comparison
 
 ## Purpose
 
-Compare sparse matrix multiplication (scipy CSR×CSC) vs dense matrix multiplication (numpy) to understand when sparse algorithms provide benefits.
+Benchmark sparse (CSR×CSC) vs dense (numpy) matrix multiplication at super sparse levels (90-99.9%, ≤10% density) to quantify performance differences.
 
-## Setup
-
-**Matrix Size**: 1000×1000  
-**Entries**: 1000 each (~0.1% density, 99.9% zeros)  
-**Algorithm**: Scipy sparse (CSR×CSC) vs numpy dense (matmul)
-
-## Quick Start
+## Execution
 
 ```bash
-cd dense_baseline_comparison
-
-# 1. Generate small matrices
-python generate_small_data.py
-
-# 2. Run benchmark
-python benchmark_comparison.py
+python sparsity_comparison.py
 ```
 
-## What Gets Measured
+## Test Configuration
 
-- **Execution time**: Sparse vs dense multiplication  
-- **Memory usage**: Storage requirements for each format  
-- **Speedup**: How much faster sparse is for highly sparse data
+- Matrix size: 1000×1000
+- Sparsity levels: **90%, 99%, 99.9%** (super sparse: ≤10% density)
+- Iterations: 3 runs per test
+- Formats: Sparse (SciPy CSR×CSC), Dense (NumPy)
 
 ## Results
 
-For 1000×1000 matrices with 99.9% zeros:
+Results in `benchmarks/`:
+- `sparsity_comparison.txt` - Human-readable table
+- `sparsity_comparison.json` - Machine-readable data
+- `sparsity_comparison.csv` - Spreadsheet format
 
-- **Sparse time**: ~0.000115s (115 microseconds)
-- **Dense time**: ~0.025s (25 milliseconds)
-- **Speedup**: ~215× faster with sparse!
-- **Memory**: Sparse uses 500× less memory (31 KB vs 15,625 KB)
+### Performance Summary
 
-## Key Findings
+| Sparsity | Non-Zeros | Sparse Time | Dense Time | Speedup | Memory Ratio |
+|----------|-----------|-------------|------------|---------|--------------|
+| 90% | 95,178 | 0.063s | 1.184s | **18.7×** | 2.6× |
+| 99% | 9,954 | 0.001s | 1.114s | **826×** | 25× |
+| 99.9% | 999 | 0.0002s | 1.209s | **7,591×** | 250× |
 
-✓ Sparse multiplication is dramatically faster for highly sparse data  
-✓ Sparse format uses significantly less memory  
-✓ Dense multiplication wastes computation on zeros  
-✓ Sparse algorithms essential for real-world sparse data
+## Analysis
 
-## Benchmark Output
+Sparse format provides exponentially increasing advantages at super sparse levels:
+- **18× faster** at 90% sparsity
+- **826× faster** at 99% sparsity  
+- **7,591× faster** at 99.9% sparsity
 
-Results saved to `benchmarks/`:
-- `comparison_results.json` - Detailed metrics
-- `comparison_results.txt` - Human-readable report
-
-## Note
-
-Small numerical differences (<1e-4) may appear due to duplicate coordinate handling between scipy and numpy. This doesn't affect the performance comparison.
-
-## Use Case
-
-This baseline establishes:
-- When sparse algorithms are beneficial (high sparsity)
-- Memory/time tradeoffs for different approaches
-- Baseline for comparing with GPU implementation later
+Memory efficiency scales similarly: sparse format uses 2.6-250× less memory depending on sparsity level.

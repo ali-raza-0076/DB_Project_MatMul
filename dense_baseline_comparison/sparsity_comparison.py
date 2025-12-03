@@ -1,6 +1,6 @@
 """
 Compare Dense CPU vs Sparse CSR×CSC at different sparsity levels.
-Tests sparsity: 50%, 90%, 95%, 99%
+Tests super sparse matrices: 90%, 99%, 99.9% sparsity (≤10% density)
 Outputs performance table showing when each method wins.
 """
 import numpy as np
@@ -10,6 +10,7 @@ import csv
 import os
 from tabulate import tabulate
 import json
+from tqdm import tqdm
 
 def generate_sparse_matrix(size, sparsity_percent, seed):
     """
@@ -40,7 +41,7 @@ def generate_sparse_matrix(size, sparsity_percent, seed):
 def benchmark_sparse_multiplication(A_sparse, B_sparse, num_runs=3):
     """Benchmark sparse CSR × CSC multiplication."""
     times = []
-    for _ in range(num_runs):
+    for _ in tqdm(range(num_runs), desc="  Sparse CPU", leave=False):
         start = time.perf_counter()
         result = A_sparse @ B_sparse
         end = time.perf_counter()
@@ -51,9 +52,9 @@ def benchmark_sparse_multiplication(A_sparse, B_sparse, num_runs=3):
     return avg_time, std_time, result
 
 def benchmark_dense_multiplication(A_dense, B_dense, num_runs=3):
-    """Benchmark dense numpy matrix multiplication."""
+    """Benchmark dense numpy multiplication."""
     times = []
-    for _ in range(num_runs):
+    for _ in tqdm(range(num_runs), desc="  Dense CPU", leave=False):
         start = time.perf_counter()
         result = np.matmul(A_dense, B_dense)
         end = time.perf_counter()
@@ -147,12 +148,12 @@ def main():
     
     # Configuration
     matrix_size = 1000
-    sparsity_levels = [50, 90, 95, 99]
+    sparsity_levels = [90, 99, 99.9]  # Super sparse: ≤10% density
     num_runs = 3
     
     # Run comparisons
     results = []
-    for sparsity in sparsity_levels:
+    for sparsity in tqdm(sparsity_levels, desc="Running Benchmarks", unit="test"):
         result = run_comparison(matrix_size, sparsity, num_runs)
         results.append(result)
     

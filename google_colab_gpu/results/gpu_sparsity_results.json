@@ -1,0 +1,20 @@
+[
+  {
+    "sparsity_percent": 90,
+    "matrix_size": 1000,
+    "gpu_time": 0.0019775666684533157,
+    "gpu_std": 0.000986854111603646
+  },
+  {
+    "sparsity_percent": 99,
+    "matrix_size": 1000,
+    "gpu_time": 0.002035166680191954,
+    "gpu_std": 0.0007012976287722408
+  },
+  {
+    "sparsity_percent": 99.9,
+    "matrix_size": 1000,
+    "gpu_time": 0.0023686000301192203,
+    "gpu_std": 0.00047519659633543486
+  }
+]

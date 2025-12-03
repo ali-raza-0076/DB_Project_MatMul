@@ -1,0 +1,62 @@
+[
+  {
+    "num_nodes": 1000,
+    "density_percent": 10,
+    "sparsity": 90.4822,
+    "nnz": 95178,
+    "cpu_sparse_time": 0.058457233322163425,
+    "cpu_sparse_std": 0.003038810306099929,
+    "gpu_dense_time": 0.0021167666806528964,
+    "gpu_dense_std": 0.001396373109215892,
+    "speedup": 27.61628565701575,
+    "winner": "GPU"
+  },
+  {
+    "num_nodes": 1000,
+    "density_percent": 1,
+    "sparsity": 99.0046,
+    "nnz": 9954,
+    "cpu_sparse_time": 0.001571766644095381,
+    "cpu_sparse_std": 0.0003164294155457678,
+    "gpu_dense_time": 0.0015142666719232996,
+    "gpu_dense_std": 0.000583759433895631,
+    "speedup": 1.0379721572416631,
+    "winner": "GPU"
+  },
+  {
+    "num_nodes": 1000,
+    "density_percent": 0.1,
+    "sparsity": 99.9,
+    "nnz": 1000,
+    "cpu_sparse_time": 0.00023539996861169735,
+    "cpu_sparse_std": 0.0001212786044449303,
+    "gpu_dense_time": 0.0015239333733916283,
+    "gpu_dense_std": 0.00044596827264973415,
+    "speedup": 0.15446867476089,
+    "winner": "CPU"
+  },
+  {
+    "num_nodes": 2000,
+    "density_percent": 10,
+    "sparsity": 90.488675,
+    "nnz": 380453,
+    "cpu_sparse_time": 0.31716869996550184,
+    "cpu_sparse_std": 0.004940441948320151,
+    "gpu_dense_time": 0.00952646671794355,
+    "gpu_dense_std": 0.0011975145697656155,
+    "speedup": 33.293424451701455,
+    "winner": "GPU"
+  },
+  {
+    "num_nodes": 2000,
+    "density_percent": 1,
+    "sparsity": 99.00495000000001,
+    "nnz": 39802,
+    "cpu_sparse_time": 0.013440966644945243,
+    "cpu_sparse_std": 0.0011014481893824985,
+    "gpu_dense_time": 0.010043600030864278,
+    "gpu_dense_std": 0.00021345949687380804,
+    "speedup": 1.3382618387471383,
+    "winner": "GPU"
+  }
+]
