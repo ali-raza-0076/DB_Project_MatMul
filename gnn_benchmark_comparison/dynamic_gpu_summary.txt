@@ -3,9 +3,19 @@ SUMMARY: Dynamic Graph Updates on GPU
 ================================================================================
 Graph                     Nodes    Edges    Sparsity   Full Recomp (s)  Incremental (s)  Speedup    Winner
 --------------------------------------------------------------------------------
-graph_5000nodes_90pct_sparsity.csv 5000     544350   90.0       0.005427         0.000854         6.36       incremental
+graph_4000nodes_90pct_sparsity.csv 4000     1679593  90.0       0.005697         0.000715         7.97       incremental
+graph_4000nodes_95pct_sparsity.csv 4000     839785   95.0       0.003591         0.000535         6.71       incremental
+graph_4000nodes_99pct_sparsity.csv 4000     16795    99.0       0.000181         0.000116         1.56       incremental
+graph_4000nodes_99pct_sparsity.csv 4000     16795    99.9       0.000138         0.000123         1.12       incremental
+graph_8000nodes_90pct_sparsity.csv 8000     6719198  90.0       0.026004         0.001311         19.83      incremental
+graph_8000nodes_95pct_sparsity.csv 8000     3359571  95.0       0.013107         0.001059         12.37      incremental
+graph_8000nodes_99pct_sparsity.csv 8000     67190    99.0       0.000364         0.000128         2.84       incremental
+graph_8000nodes_99pct_sparsity.csv 8000     67190    99.9       0.000385         0.000136         2.84       incremental
+graph_10000nodes_90pct_sparsity.csv 10000    10498954 90.0       0.039201         0.001445         27.12      incremental
+graph_10000nodes_95pct_sparsity.csv 10000    5249430  95.0       0.020415         0.000944         21.63      incremental
+graph_10000nodes_99pct_sparsity.csv 10000    104991   99.0       0.000526         0.000135         3.90       incremental
+graph_10000nodes_99pct_sparsity.csv 10000    104991   99.9       0.000535         0.000145         3.69       incremental
 --------------------------------------------------------------------------------
-Maximum tested graph size: 5000 nodes
-Early stopping threshold: 60s per test
+Maximum tested graph size: 10000 nodes
 Edges added per update: 3
-Runs per test: 2000
+Runs per test: 1000

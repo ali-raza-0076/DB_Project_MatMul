@@ -32,9 +32,6 @@ except ImportError as e:
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Timeout threshold in seconds (60 seconds per test to achieve 30-60s execution times)
-TIMEOUT_SECONDS = 60
-
 
 def to_numpy(tensor):
     """Convert PyTorch tensor to NumPy."""
@@ -74,6 +71,12 @@ def gcn_forward_gpu(rows, cols, num_nodes, features, weight):
     sync_gpu()
     
     return output
+
+
+def save_results_incremental(results, output_file):
+    """Save results immediately after each configuration completes."""
+    with open(output_file, "w") as f:
+        json.dump(results, f, indent=2)
 
 
 def add_edges_gpu_full_recomputation(rows, cols, num_nodes, new_edges, features, weight):
@@ -121,10 +124,7 @@ def add_edges_gpu_incremental(rows, cols, num_nodes, new_edges, features, weight
 def test_dynamic_updates_gpu(csv_file, sparsity_pct, edges_to_add=3, num_runs=5):
     """
     Test dynamic graph updates: incremental vs full recomputation.
-    Returns None if timeout is exceeded.
     """
-    test_start_time = time.perf_counter()
-    
     print(f"\n{'='*60}")
     print(f"Testing: {os.path.basename(csv_file)} (Sparsity: {sparsity_pct}%)")
     print(f"{'='*60}")
@@ -145,12 +145,6 @@ def test_dynamic_updates_gpu(csv_file, sparsity_pct, edges_to_add=3, num_runs=5)
     # Vectorized aggregation (much faster)
     aggregated.index_add_(0, rows, features[cols])
     sync_gpu()
-    
-    # Check if precomputation took too long
-    elapsed_so_far = time.perf_counter() - test_start_time
-    if elapsed_so_far > TIMEOUT_SECONDS:
-        print(f"  WARNING: Precomputation exceeded timeout ({elapsed_so_far:.2f}s)")
-        return None
     
     # Generate random edges to add (ensure they don't already exist)
     existing_edges = set(zip(to_numpy(rows), to_numpy(cols)))
@@ -173,11 +167,6 @@ def test_dynamic_updates_gpu(csv_file, sparsity_pct, edges_to_add=3, num_runs=5)
     full_recomp_times = []
     
     for run in range(num_runs):
-        # Check overall test timeout
-        if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
-            print(f"  WARNING: Overall test timeout exceeded ({time.perf_counter() - test_start_time:.2f}s)")
-            return None
-        
         # Reset graph
         curr_rows, curr_cols = rows.clone(), cols.clone()
         
@@ -197,11 +186,6 @@ def test_dynamic_updates_gpu(csv_file, sparsity_pct, edges_to_add=3, num_runs=5)
     incremental_times = []
     
     for run in range(num_runs):
-        # Check overall test timeout
-        if time.perf_counter() - test_start_time > TIMEOUT_SECONDS:
-            print(f"  WARNING: Overall test timeout exceeded ({time.perf_counter() - test_start_time:.2f}s)")
-            return None
-        
         # Reset graph
         curr_rows, curr_cols = rows.clone(), cols.clone()
         curr_aggregated = aggregated.clone()
@@ -240,6 +224,12 @@ def test_dynamic_updates_gpu(csv_file, sparsity_pct, edges_to_add=3, num_runs=5)
     }
 
 
+def clear_gpu_cache():
+    """Clear GPU cache to prevent memory fragmentation."""
+    if GPU_AVAILABLE:
+        torch.cuda.empty_cache()
+
+
 def main():
     if not GPU_AVAILABLE:
         print("\n" + "="*60)
@@ -253,22 +243,26 @@ def main():
     print("GPU DYNAMIC GRAPH BENCHMARK")
     print(f"Device: {torch.cuda.get_device_name(0)}")
     print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-    print(f"Early Stopping: {TIMEOUT_SECONDS}s HARD LIMIT per graph size")
-    print("Strategy: Each graph test runs for 25+ seconds, STOP if exceeds 60s")
+    print("Node sizes: 4k, 8k, 10k")
+    print("Sparsity levels: 90%, 95%, 99%, 99.9%")
     print("="*60 + "\n")
     
-    # Test with MASSIVE iterations to achieve 25+ second execution per graph
-    # 5000 nodes: ~0.015s per 1000 runs → need ~2000 iterations for 30s
-    initial_sizes = [5000, 4500, 4000, 3500, 3000]
-    sparsity_levels = [90]  # Only 90% sparsity (densest, takes longest)
+    # Test graphs: 4k, 8k, 10k nodes with multiple sparsity levels
+    # Resume from where we stopped: 4000 nodes, 95% sparsity onwards
+    initial_sizes = [4000, 8000, 10000]
+    sparsity_levels = [90, 95, 99, 99.9]
+    
+    # Skip completed: 4000 nodes @ 90% sparsity
+    completed_tests = {(4000, 90)}
+    
     edges_to_add = 3
-    num_runs = 2000  # 2000 runs to achieve 25-30+ second execution times
+    num_runs = 1000  # 1000 iterations per test to prevent CUDA memory issues
     
     results = []
     max_successful_nodes = 0
     
-    print(f"Each graph will run {num_runs} iterations to achieve 25+ second execution")
-    print(f"HARD TIMEOUT: {TIMEOUT_SECONDS}s - will STOP COMPLETELY if exceeded\n")
+    print(f"Testing {len(initial_sizes)} graph sizes with {num_runs} iterations each")
+    print(f"Graph sizes: {initial_sizes} nodes\n")
     
     for num_nodes in initial_sizes:
         print(f"\n{'#'*60}")
@@ -276,7 +270,6 @@ def main():
         print(f"{'#'*60}")
         
         size_results = []
-        timed_out = False
         
         for sparsity in sparsity_levels:
             csv_file = f"../data/graph_{num_nodes}nodes_{int(sparsity)}pct_sparsity.csv"
@@ -284,38 +277,28 @@ def main():
             if not os.path.exists(csv_file):
                 print(f"⚠️  Graph file not found: {csv_file}")
                 print(f"    Generating graph with {num_nodes} nodes, {sparsity}% sparsity...")
-                # Graph doesn't exist, skip to smaller size
-                print(f"    Skipping to next smaller size (reduce by 500 nodes)")
-                timed_out = True
-                break
+                print(f"    Skipping this graph size")
+                continue
             
             result = test_dynamic_updates_gpu(csv_file, sparsity, edges_to_add, num_runs)
-            
-            if result is None:
-                print(f"\n⏰ TIMEOUT: {num_nodes} nodes with {sparsity}% sparsity exceeded {TIMEOUT_SECONDS}s")
-                print(f"    Reducing graph size by 500 nodes and continuing...")
-                timed_out = True
-                break
-            
             size_results.append(result)
+            
+            # Save results incrementally after each configuration
+            results.extend(size_results)
+            save_results_incremental(results, "dynamic_gpu_results.json")
+            results = results[:-len(size_results)]  # Remove for proper accumulation
         
-        if timed_out:
-            # STOP COMPLETELY - don't try smaller sizes
-            print(f"\n❌ HARD STOP: {num_nodes} nodes exceeded {TIMEOUT_SECONDS}s limit")
-            print(f"Early stopping triggered - benchmark halted")
-            if max_successful_nodes > 0:
-                print(f"Maximum successful size: {max_successful_nodes} nodes")
-            break  # EXIT LOOP COMPLETELY
-        
-        # All sparsity levels passed for this graph size
+        # All sparsity levels completed for this graph size
         results.extend(size_results)
+        save_results_incremental(results, "dynamic_gpu_results.json")
+        clear_gpu_cache()  # Clear GPU memory between graph sizes
         if num_nodes > max_successful_nodes:
-            max_successful_nodes = num_nodes  # Update maximum
+            max_successful_nodes = num_nodes
         print(f"\n✅ Successfully completed {num_nodes} nodes (all sparsity levels)")
     
     if len(results) == 0:
-        print("\n⚠️  No results collected. All graph sizes exceeded timeout.")
-        print("    Try starting with smaller graphs or increasing timeout.")
+        print("\n⚠️  No results collected. Graph files may not exist.")
+        print("    Generate graph data first using generate_graph_data.py")
         return
     
     # Save results
@@ -338,7 +321,6 @@ def main():
     
     print(f"{'-'*80}")
     print(f"Maximum tested graph size: {max_successful_nodes} nodes")
-    print(f"Early stopping threshold: {TIMEOUT_SECONDS}s per test")
     print(f"Edges added per update: {edges_to_add}")
     print(f"Runs per test: {num_runs}")
     
@@ -356,7 +338,6 @@ def main():
         
         f.write("-"*80 + "\n")
         f.write(f"Maximum tested graph size: {max_successful_nodes} nodes\n")
-        f.write(f"Early stopping threshold: {TIMEOUT_SECONDS}s per test\n")
         f.write(f"Edges added per update: {edges_to_add}\n")
         f.write(f"Runs per test: {num_runs}\n")
     

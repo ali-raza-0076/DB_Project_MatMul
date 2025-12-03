@@ -1,13 +1,134 @@
 [
   {
-    "csv_file": "graph_5000nodes_90pct_sparsity.csv",
-    "num_nodes": 5000,
-    "num_edges": 544350,
+    "csv_file": "graph_4000nodes_90pct_sparsity.csv",
+    "num_nodes": 4000,
+    "num_edges": 1679593,
     "sparsity_pct": 90,
     "edges_added": 3,
-    "full_recomputation_s": 0.005427372599137016,
-    "incremental_update_s": 0.0008535345514537766,
-    "speedup": 6.358702866677023,
+    "full_recomputation_s": 0.005696698000006109,
+    "incremental_update_s": 0.0007149123999897711,
+    "speedup": 7.968386056931754,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_4000nodes_95pct_sparsity.csv",
+    "num_nodes": 4000,
+    "num_edges": 839785,
+    "sparsity_pct": 95,
+    "edges_added": 3,
+    "full_recomputation_s": 0.003590644599998086,
+    "incremental_update_s": 0.0005348005000087141,
+    "speedup": 6.713988861153981,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_4000nodes_99pct_sparsity.csv",
+    "num_nodes": 4000,
+    "num_edges": 16795,
+    "sparsity_pct": 99,
+    "edges_added": 3,
+    "full_recomputation_s": 0.00018086219999167953,
+    "incremental_update_s": 0.0001158088999982283,
+    "speedup": 1.5617297115717914,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_4000nodes_99pct_sparsity.csv",
+    "num_nodes": 4000,
+    "num_edges": 16795,
+    "sparsity_pct": 99.9,
+    "edges_added": 3,
+    "full_recomputation_s": 0.00013805849998880149,
+    "incremental_update_s": 0.00012324029998490006,
+    "speedup": 1.1202382662628785,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_8000nodes_90pct_sparsity.csv",
+    "num_nodes": 8000,
+    "num_edges": 6719198,
+    "sparsity_pct": 90,
+    "edges_added": 3,
+    "full_recomputation_s": 0.026003515699985654,
+    "incremental_update_s": 0.0013112297000088802,
+    "speedup": 19.831396207552,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_8000nodes_95pct_sparsity.csv",
+    "num_nodes": 8000,
+    "num_edges": 3359571,
+    "sparsity_pct": 95,
+    "edges_added": 3,
+    "full_recomputation_s": 0.01310720189998392,
+    "incremental_update_s": 0.0010594429000266245,
+    "speedup": 12.371787002069226,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_8000nodes_99pct_sparsity.csv",
+    "num_nodes": 8000,
+    "num_edges": 67190,
+    "sparsity_pct": 99,
+    "edges_added": 3,
+    "full_recomputation_s": 0.00036444300000493967,
+    "incremental_update_s": 0.00012838559998544952,
+    "speedup": 2.8386594761892576,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_8000nodes_99pct_sparsity.csv",
+    "num_nodes": 8000,
+    "num_edges": 67190,
+    "sparsity_pct": 99.9,
+    "edges_added": 3,
+    "full_recomputation_s": 0.00038468330000068817,
+    "incremental_update_s": 0.00013567380000313278,
+    "speedup": 2.8353543572289244,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_10000nodes_90pct_sparsity.csv",
+    "num_nodes": 10000,
+    "num_edges": 10498954,
+    "sparsity_pct": 90,
+    "edges_added": 3,
+    "full_recomputation_s": 0.03920146269999259,
+    "incremental_update_s": 0.001445381899986387,
+    "speedup": 27.121871873697742,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_10000nodes_95pct_sparsity.csv",
+    "num_nodes": 10000,
+    "num_edges": 5249430,
+    "sparsity_pct": 95,
+    "edges_added": 3,
+    "full_recomputation_s": 0.020415083999998387,
+    "incremental_update_s": 0.0009436590999830515,
+    "speedup": 21.63396082373926,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_10000nodes_99pct_sparsity.csv",
+    "num_nodes": 10000,
+    "num_edges": 104991,
+    "sparsity_pct": 99,
+    "edges_added": 3,
+    "full_recomputation_s": 0.0005258464000180538,
+    "incremental_update_s": 0.00013500409997868702,
+    "speedup": 3.895040225452921,
+    "winner": "incremental"
+  },
+  {
+    "csv_file": "graph_10000nodes_99pct_sparsity.csv",
+    "num_nodes": 10000,
+    "num_edges": 104991,
+    "sparsity_pct": 99.9,
+    "edges_added": 3,
+    "full_recomputation_s": 0.0005345397999972192,
+    "incremental_update_s": 0.00014471519998915028,
+    "speedup": 3.693736387313117,
     "winner": "incremental"
   }
 ]

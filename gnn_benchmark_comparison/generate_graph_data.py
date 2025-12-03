@@ -50,13 +50,14 @@ def generate_graph_adjacency(num_nodes, edges_per_node, seed, output_file):
     
     return len(edges)
 
-def generate_sparse_graph(num_nodes, sparsity_pct, seed, output_file):
+def generate_sparse_graph_fast(num_nodes, sparsity_pct, seed, output_file):
     """
-    Generate sparse graph with specific sparsity level.
+    Generate sparse graph ULTRA FAST - accept ~1% duplicates for massive speedup.
+    For large graphs (20k+ nodes), tracking every edge in memory is too slow.
     
     Args:
         num_nodes: Number of nodes
-        sparsity_pct: Target sparsity percentage (90, 99, 99.9)
+        sparsity_pct: Target sparsity percentage (99)
         seed: Random seed
         output_file: Output CSV file
     """
@@ -67,44 +68,52 @@ def generate_sparse_graph(num_nodes, sparsity_pct, seed, output_file):
     density = (100 - sparsity_pct) / 100
     num_edges = int(total_possible * density)
     
-    # Generate unique random edges
-    edges = set()
-    attempts = 0
-    max_attempts = num_edges * 10
+    print(f"Generating {num_nodes:,} nodes with {num_edges:,} edges ({sparsity_pct}% sparsity)...")
     
-    while len(edges) < num_edges and attempts < max_attempts:
-        src = np.random.randint(0, num_nodes)
-        dst = np.random.randint(0, num_nodes)
-        if src != dst:  # No self-loops
-            edges.add((src, dst))
-        attempts += 1
-    
-    # Write to file (0-indexed for direct use)
+    # For SPEED: generate slightly more edges to account for duplicates (~5% extra)
+    # but DON'T track all edges in a set (too memory intensive for 4M+ edges)
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    target_with_buffer = int(num_edges * 1.05)  # 5% extra for duplicates
+    
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        for src, dst in edges:
-            writer.writerow([src, dst])
+        
+        # Generate all edges at once (vectorized - MUCH faster)
+        print(f"  Generating {target_with_buffer:,} random edges...")
+        src_all = np.random.randint(0, num_nodes, size=target_with_buffer)
+        dst_all = np.random.randint(0, num_nodes, size=target_with_buffer)
+        
+        print(f"  Writing to file...")
+        written = 0
+        for src, dst in zip(src_all, dst_all):
+            if src != dst:  # Only filter self-loops
+                writer.writerow([int(src), int(dst)])
+                written += 1
+                
+                if written % 1000000 == 0:
+                    print(f"    Written: {written:,} edges")
     
-    actual_sparsity = 100 * (1 - len(edges) / total_possible)
+    actual_sparsity = 100 * (1 - written / total_possible)
     
-    print(f"Generated {os.path.basename(output_file)}")
-    print(f"  Nodes: {num_nodes:,}, Edges: {len(edges):,}")
-    print(f"  Target Sparsity: {sparsity_pct}%, Actual: {actual_sparsity:.4f}%")
-    print()
+    print(f"✅ Generated {os.path.basename(output_file)}")
+    print(f"   Nodes: {num_nodes:,}, Edges: {written:,}")
+    print(f"   Sparsity: {actual_sparsity:.2f}%\\n")
     
-    return len(edges)
+    return written
 
 
 if __name__ == "__main__":
-    # Generate MASSIVE graphs to achieve 30-60 second execution times
-    # Up to 50,000 nodes with millions of edges at 90% sparsity
-    node_sizes = [5000, 6000, 8000, 10000, 15000, 20000, 30000, 40000, 50000]
-    sparsity_levels = [90, 99, 99.9]
+    # Generate graphs for GPU dynamic benchmark: 4k, 8k, 10k nodes
+    # Multiple sparsity levels: 90%, 95%, 99%, 99.9%
+    # Sparsity represents percentage of zero entries in adjacency matrix
+    node_sizes = [4000, 8000, 10000]
+    sparsity_levels = [90, 95, 99, 99.9]
     
     print("="*70)
-    print("GENERATING MASSIVE SPARSE GRAPHS FOR GNN DYNAMIC BENCHMARKING")
-    print("Up to 50,000 nodes to achieve 30-60 second execution times")
+    print("GENERATING SPARSE GRAPHS FOR GPU DYNAMIC BENCHMARKING")
+    print("Node sizes: 4,000 | 8,000 | 10,000")
+    print("Sparsity levels: 90% | 95% | 99% | 99.9%")
     print("="*70)
     print()
     
@@ -113,7 +122,7 @@ if __name__ == "__main__":
             output_file = f"../data/graph_{nodes}nodes_{int(sparsity)}pct_sparsity.csv"
             seed = nodes * 100 + int(sparsity * 10)
             
-            generate_sparse_graph(nodes, sparsity, seed, output_file)
+            generate_sparse_graph_fast(nodes, sparsity, seed, output_file)
     
     print("="*70)
     print("GRAPH DATA GENERATION COMPLETE")
