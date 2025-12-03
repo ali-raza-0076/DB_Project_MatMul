@@ -1,6 +1,9 @@
 """
-GNN Benchmark: Sparse CSR vs Dense CPU Matrix Multiplication
-Compares sparse CSR×CSR vs dense numpy matrix multiplication for graph adjacency matrices.
+GNN Benchmark: CPU vs GPU Matrix Multiplication for Graph Adjacency
+Compares:
+1. CPU: Sparse CSR×CSR vs Dense numpy
+2. GPU: PyTorch dense matrix multiplication
+3. Overall winner comparison
 """
 
 import numpy as np
@@ -10,6 +13,15 @@ import csv
 import os
 import json
 from tabulate import tabulate
+import torch
+
+# Check GPU availability
+GPU_AVAILABLE = torch.cuda.is_available()
+if GPU_AVAILABLE:
+    DEVICE = torch.device('cuda')
+    torch.cuda.synchronize()
+else:
+    DEVICE = torch.device('cpu')
 
 def load_graph_csr(csv_file):
     """Load graph from CSV and convert to CSR format."""
@@ -50,34 +62,63 @@ def benchmark_dense_multiplication(A_dense, B_dense, runs=3):
         times.append(elapsed)
     return np.mean(times)
 
+def benchmark_gpu_multiplication(A_gpu, B_gpu, runs=3):
+    """Benchmark GPU dense matrix multiplication."""
+    times = []
+    for _ in range(runs):
+        torch.cuda.synchronize()
+        start = time.perf_counter()
+        C = A_gpu @ B_gpu
+        torch.cuda.synchronize()
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+    return np.mean(times)
+
+def benchmark_gpu_sparse_multiplication(A_sparse_gpu, B_sparse_gpu, runs=3):
+    """Benchmark GPU sparse matrix multiplication."""
+    times = []
+    for _ in range(runs):
+        torch.cuda.synchronize()
+        start = time.perf_counter()
+        C = torch.sparse.mm(A_sparse_gpu, B_sparse_gpu.to_dense())
+        torch.cuda.synchronize()
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+    return np.mean(times)
+
 def main():
-    print("\nGNN BENCHMARK: Graph Adjacency Matrix Multiplication")
-    print("Dense CPU vs Sparse CPU (CSR×CSR)")
-    print("=" * 70)
+    print("\n" + "=" * 80)
+    print("GNN BENCHMARK: Graph Adjacency Matrix Multiplication")
+    print("CPU (Sparse CSR vs Dense) | GPU (Sparse vs Dense)")
+    print("=" * 80)
     
-    runs = 3
-    print(f"\nRuns per test: {runs}\n")
+    runs = 1
+    print(f"\nRuns per test: {runs}")
     
-    # Define test graphs
+    if GPU_AVAILABLE:
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        print(f"CUDA Version: {torch.version.cuda}")
+    else:
+        print("WARNING: GPU not available, GPU benchmarks will be skipped")
+    print()
+    
+    # Define test graphs - only 99% sparsity for efficiency
     test_graphs = [
-        ("../data/graph_4000nodes_90pct_sparsity.csv", "4K-90%", "4,000 nodes, 90% sparsity"),
-        ("../data/graph_4000nodes_95pct_sparsity.csv", "4K-95%", "4,000 nodes, 95% sparsity"),
         ("../data/graph_4000nodes_99pct_sparsity.csv", "4K-99%", "4,000 nodes, 99% sparsity"),
-        ("../data/graph_8000nodes_90pct_sparsity.csv", "8K-90%", "8,000 nodes, 90% sparsity"),
-        ("../data/graph_8000nodes_95pct_sparsity.csv", "8K-95%", "8,000 nodes, 95% sparsity"),
         ("../data/graph_8000nodes_99pct_sparsity.csv", "8K-99%", "8,000 nodes, 99% sparsity"),
-        ("../data/graph_10000nodes_90pct_sparsity.csv", "10K-90%", "10,000 nodes, 90% sparsity"),
-        ("../data/graph_10000nodes_95pct_sparsity.csv", "10K-95%", "10,000 nodes, 95% sparsity"),
         ("../data/graph_10000nodes_99pct_sparsity.csv", "10K-99%", "10,000 nodes, 99% sparsity"),
     ]
     
-    print("Graph Descriptions:")
+    print("Graph Configurations:")
     for _, name, desc in test_graphs:
         print(f"  {name:8}: {desc}")
     print()
     
-    results = []
-    table_data = []
+    cpu_results = []
+    gpu_results = []
+    cpu_table_data = []
+    gpu_table_data = []
+    comparison_table_data = []
     
     for csv_file, graph_name, description in test_graphs:
         full_path = os.path.join(os.path.dirname(__file__), csv_file)
@@ -100,83 +141,223 @@ def main():
         total_elements = num_nodes * num_nodes
         sparsity_pct = (1 - num_edges / total_elements) * 100
         
-        # Benchmark
-        sparse_time = benchmark_sparse_multiplication(A_csr, B_csr, runs)
-        dense_time = benchmark_dense_multiplication(A_dense, B_dense, runs)
+        # CPU Benchmark
+        cpu_sparse_time = benchmark_sparse_multiplication(A_csr, B_csr, runs)
+        cpu_dense_time = benchmark_dense_multiplication(A_dense, B_dense, runs)
+        cpu_speedup = cpu_dense_time / cpu_sparse_time
+        cpu_winner = "Sparse" if cpu_speedup > 1 else "Dense"
+        cpu_best_time = min(cpu_sparse_time, cpu_dense_time)
         
-        speedup = dense_time / sparse_time
-        winner = "Sparse" if speedup > 1 else "Dense"
-        
-        # Store results
-        result = {
+        # Store CPU results
+        cpu_result = {
             "graph": graph_name,
             "nodes": num_nodes,
             "edges": num_edges,
             "sparsity_pct": sparsity_pct,
-            "sparse_time_s": sparse_time,
-            "dense_time_s": dense_time,
-            "speedup": speedup,
-            "winner": winner
+            "sparse_time_s": cpu_sparse_time,
+            "dense_time_s": cpu_dense_time,
+            "speedup": cpu_speedup,
+            "winner": cpu_winner,
+            "best_time": cpu_best_time
         }
-        results.append(result)
+        cpu_results.append(cpu_result)
         
-        # Format for table
-        table_data.append([
+        # CPU table
+        cpu_table_data.append([
             graph_name,
             f"{num_nodes:,}",
             f"{num_edges:,}",
             f"{sparsity_pct:.4f}%",
-            f"{sparse_time:.6f}s",
-            f"{dense_time:.6f}s",
-            f"{speedup:.2f}×",
-            winner
+            f"{cpu_sparse_time:.6f}s",
+            f"{cpu_dense_time:.6f}s",
+            f"{cpu_speedup:.2f}×",
+            cpu_winner
         ])
+        
+        # GPU Benchmark
+        if GPU_AVAILABLE:
+            # Dense GPU
+            A_gpu_dense = torch.from_numpy(A_dense).float().to(DEVICE)
+            B_gpu_dense = torch.from_numpy(B_dense).float().to(DEVICE)
+            gpu_dense_time = benchmark_gpu_multiplication(A_gpu_dense, B_gpu_dense, runs)
+            
+            # Sparse GPU (convert CSR to PyTorch sparse COO)
+            A_coo = A_csr.tocoo()
+            indices = torch.LongTensor([A_coo.row, A_coo.col]).to(DEVICE)
+            values = torch.FloatTensor(A_coo.data).to(DEVICE)
+            A_gpu_sparse = torch.sparse_coo_tensor(indices, values, A_coo.shape).to(DEVICE)
+            
+            B_coo = B_csr.tocoo()
+            indices = torch.LongTensor([B_coo.row, B_coo.col]).to(DEVICE)
+            values = torch.FloatTensor(B_coo.data).to(DEVICE)
+            B_gpu_sparse = torch.sparse_coo_tensor(indices, values, B_coo.shape).to(DEVICE)
+            
+            gpu_sparse_time = benchmark_gpu_sparse_multiplication(A_gpu_sparse, B_gpu_sparse, runs)
+            gpu_speedup = gpu_dense_time / gpu_sparse_time
+            gpu_winner = "Sparse" if gpu_speedup > 1 else "Dense"
+            gpu_best_time = min(gpu_sparse_time, gpu_dense_time)
+            
+            gpu_result = {
+                "graph": graph_name,
+                "nodes": num_nodes,
+                "edges": num_edges,
+                "sparsity_pct": sparsity_pct,
+                "sparse_time_s": gpu_sparse_time,
+                "dense_time_s": gpu_dense_time,
+                "speedup": gpu_speedup,
+                "winner": gpu_winner,
+                "best_time": gpu_best_time
+            }
+            gpu_results.append(gpu_result)
+            
+            gpu_table_data.append([
+                graph_name,
+                f"{num_nodes:,}",
+                f"{num_edges:,}",
+                f"{sparsity_pct:.4f}%",
+                f"{gpu_sparse_time:.6f}s",
+                f"{gpu_dense_time:.6f}s",
+                f"{gpu_speedup:.2f}×",
+                gpu_winner
+            ])
+            
+            # Comparison
+            overall_speedup = cpu_best_time / gpu_best_time
+            overall_winner = "GPU" if overall_speedup > 1 else "CPU"
+            
+            comparison_table_data.append([
+                graph_name,
+                f"{num_nodes:,}",
+                f"{cpu_winner} ({cpu_best_time:.6f}s)",
+                f"{gpu_winner} ({gpu_best_time:.6f}s)",
+                f"{overall_speedup:.2f}×",
+                overall_winner
+            ])
     
-    # Print table
-    headers = ["Graph", "Nodes", "Edges", "Sparsity", "Sparse Time", "Dense Time", "Speedup", "Winner"]
-    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    # Print CPU table
+    print("\n" + "=" * 80)
+    print("TABLE 1: CPU Multi-Core Performance (Sparse CSR vs Dense)")
+    print("=" * 80)
+    cpu_headers = ["Graph", "Nodes", "Edges", "Sparsity", "Sparse Time", "Dense Time", "Speedup", "Winner"]
+    print(tabulate(cpu_table_data, headers=cpu_headers, tablefmt="grid"))
     
-    # Summary
-    print("\nSUMMARY")
-    print("=" * 70)
-    sparse_wins = sum(1 for r in results if r["winner"] == "Sparse")
-    dense_wins = sum(1 for r in results if r["winner"] == "Dense")
-    print(f"Sparse wins: {sparse_wins}/{len(results)} configurations")
-    print(f"Dense wins:  {dense_wins}/{len(results)} configurations")
-    print()
+    # CPU Summary
+    print("\nCPU SUMMARY:")
+    cpu_sparse_wins = sum(1 for r in cpu_results if r["winner"] == "Sparse")
+    cpu_dense_wins = sum(1 for r in cpu_results if r["winner"] == "Dense")
+    print(f"Sparse CSR wins: {cpu_sparse_wins}/{len(cpu_results)} configurations")
+    print(f"Dense wins: {cpu_dense_wins}/{len(cpu_results)} configurations")
     
-    for r in results:
-        print(f"{r['graph']:8} ({r['nodes']:6,} nodes): {r['winner']:6} - {r['speedup']:.2f}x speedup, {r['sparsity_pct']:.4f}% sparse")
+    # Print GPU table
+    if GPU_AVAILABLE and gpu_table_data:
+        print("\n" + "=" * 80)
+        print("TABLE 2: GPU Multi-Core Performance (Sparse vs Dense)")
+        print("=" * 80)
+        gpu_headers = ["Graph", "Nodes", "Edges", "Sparsity", "Sparse Time", "Dense Time", "Speedup", "Winner"]
+        print(tabulate(gpu_table_data, headers=gpu_headers, tablefmt="grid"))
+        
+        # GPU Summary
+        print("\nGPU SUMMARY:")
+        gpu_sparse_wins = sum(1 for r in gpu_results if r["winner"] == "Sparse")
+        gpu_dense_wins = sum(1 for r in gpu_results if r["winner"] == "Dense")
+        print(f"Sparse wins: {gpu_sparse_wins}/{len(gpu_results)} configurations")
+        print(f"Dense wins: {gpu_dense_wins}/{len(gpu_results)} configurations")
+        
+        # Print comparison table
+        print("\n" + "=" * 80)
+        print("TABLE 3: CPU vs GPU Winner Comparison")
+        print("=" * 80)
+        comp_headers = ["Graph", "Nodes", "Best CPU", "Best GPU", "Speedup", "Winner"]
+        print(tabulate(comparison_table_data, headers=comp_headers, tablefmt="grid"))
+        
+        # Overall summary
+        print("\n" + "=" * 80)
+        print("OVERALL SUMMARY")
+        print("=" * 80)
+        gpu_wins = sum(1 for row in comparison_table_data if row[-1] == "GPU")
+        cpu_wins_overall = len(comparison_table_data) - gpu_wins
+        print(f"GPU wins: {gpu_wins}/{len(comparison_table_data)} configurations")
+        print(f"CPU wins: {cpu_wins_overall}/{len(comparison_table_data)} configurations")
+        print()
+        
+        for i, cpu_res in enumerate(cpu_results):
+            if i < len(gpu_results):
+                gpu_res = gpu_results[i]
+                speedup = cpu_res['best_time'] / gpu_res['best_time']
+                winner = "GPU" if speedup > 1 else "CPU"
+                print(f"{cpu_res['graph']:8} ({cpu_res['nodes']:6,} nodes): {winner:3} - {speedup:.2f}x speedup")
     
     # Save results
     output_dir = "benchmarks"
     os.makedirs(output_dir, exist_ok=True)
     
     # JSON
-    with open(os.path.join(output_dir, "gnn_sparse_dense_results.json"), "w") as f:
-        json.dump(results, f, indent=2)
+    results_json = {
+        "cpu_results": cpu_results,
+        "gpu_results": gpu_results if GPU_AVAILABLE else []
+    }
+    with open(os.path.join(output_dir, "gnn_cpu_gpu_comparison.json"), "w") as f:
+        json.dump(results_json, f, indent=2)
     
     # Text summary
-    with open(os.path.join(output_dir, "gnn_sparse_dense_results.txt"), "w") as f:
+    with open(os.path.join(output_dir, "gnn_cpu_gpu_comparison.txt"), "w") as f:
+        f.write("=" * 80 + "\n")
         f.write("GNN BENCHMARK: Graph Adjacency Matrix Multiplication\n")
-        f.write("Dense CPU vs Sparse CPU (CSR×CSR)\n")
-        f.write("=" * 70 + "\n\n")
-        f.write(f"Runs per test: {runs}\n\n")
-        f.write("Graph Descriptions:\n")
+        f.write("CPU (Sparse CSR vs Dense) | GPU (Sparse vs Dense)\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"Runs per test: {runs}\n")
+        if GPU_AVAILABLE:
+            f.write(f"GPU: {torch.cuda.get_device_name(0)}\n")
+        f.write("\nGraph Configurations:\n")
         for _, name, desc in test_graphs:
             f.write(f"  {name:8}: {desc}\n")
         f.write("\n")
-        f.write(tabulate(table_data, headers=headers, tablefmt="grid"))
-        f.write("\n\nSUMMARY\n")
-        f.write("=" * 70 + "\n")
-        f.write(f"Sparse wins: {sparse_wins}/{len(results)} configurations\n")
-        f.write(f"Dense wins:  {dense_wins}/{len(results)} configurations\n\n")
-        for r in results:
-            f.write(f"{r['graph']:8} ({r['nodes']:6,} nodes): {r['winner']:6} - {r['speedup']:.2f}x speedup, {r['sparsity_pct']:.4f}% sparse\n")
+        
+        # CPU table
+        f.write("=" * 80 + "\n")
+        f.write("TABLE 1: CPU Multi-Core Performance (Sparse CSR vs Dense)\n")
+        f.write("=" * 80 + "\n")
+        f.write(tabulate(cpu_table_data, headers=cpu_headers, tablefmt="grid"))
+        f.write(f"\n\nCPU SUMMARY:\n")
+        f.write(f"Sparse CSR wins: {cpu_sparse_wins}/{len(cpu_results)} configurations\n")
+        f.write(f"Dense wins: {cpu_dense_wins}/{len(cpu_results)} configurations\n")
+        
+        if GPU_AVAILABLE and gpu_table_data:
+            # GPU table
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("TABLE 2: GPU Multi-Core Performance (Sparse vs Dense)\n")
+            f.write("=" * 80 + "\n")
+            f.write(tabulate(gpu_table_data, headers=gpu_headers, tablefmt="grid"))
+            f.write(f"\n\nGPU SUMMARY:\n")
+            gpu_sparse_wins = sum(1 for r in gpu_results if r["winner"] == "Sparse")
+            gpu_dense_wins = sum(1 for r in gpu_results if r["winner"] == "Dense")
+            f.write(f"Sparse wins: {gpu_sparse_wins}/{len(gpu_results)} configurations\n")
+            f.write(f"Dense wins: {gpu_dense_wins}/{len(gpu_results)} configurations\n")
+            
+            # Comparison table
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("TABLE 3: CPU vs GPU Winner Comparison\n")
+            f.write("=" * 80 + "\n")
+            f.write(tabulate(comparison_table_data, headers=comp_headers, tablefmt="grid"))
+            
+            # Overall summary
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("OVERALL SUMMARY\n")
+            f.write("=" * 80 + "\n")
+            f.write(f"GPU wins: {gpu_wins}/{len(comparison_table_data)} configurations\n")
+            f.write(f"CPU wins: {cpu_wins_overall}/{len(comparison_table_data)} configurations\n\n")
+            for i, cpu_res in enumerate(cpu_results):
+                if i < len(gpu_results):
+                    gpu_res = gpu_results[i]
+                    speedup = cpu_res['best_time'] / gpu_res['best_time']
+                    winner = "GPU" if speedup > 1 else "CPU"
+                    f.write(f"{cpu_res['graph']:8} ({cpu_res['nodes']:6,} nodes): {winner:3} - {speedup:.2f}x speedup\n")
     
-    print(f"\nResults saved to:")
-    print(f"  - {output_dir}/gnn_sparse_dense_results.json")
-    print(f"  - {output_dir}/gnn_sparse_dense_results.txt")
+    print(f"\n" + "=" * 80)
+    print(f"Results saved to:")
+    print(f"  - {output_dir}/gnn_cpu_gpu_comparison.json")
+    print(f"  - {output_dir}/gnn_cpu_gpu_comparison.txt")
+    print("=" * 80)
 
 if __name__ == "__main__":
     main()

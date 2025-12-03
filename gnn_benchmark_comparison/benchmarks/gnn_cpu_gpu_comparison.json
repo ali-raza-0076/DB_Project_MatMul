@@ -1,0 +1,72 @@
+{
+  "cpu_results": [
+    {
+      "graph": "4K-99%",
+      "nodes": 4000,
+      "edges": 16795,
+      "sparsity_pct": 99.89503125,
+      "sparse_time_s": 0.0006359999997584964,
+      "dense_time_s": 0.22656840000036027,
+      "speedup": 356.23962277734813,
+      "winner": "Sparse",
+      "best_time": 0.0006359999997584964
+    },
+    {
+      "graph": "8K-99%",
+      "nodes": 8000,
+      "edges": 67190,
+      "sparsity_pct": 99.895015625,
+      "sparse_time_s": 0.003467500000624568,
+      "dense_time_s": 1.7552787999993598,
+      "speedup": 506.20873819270304,
+      "winner": "Sparse",
+      "best_time": 0.003467500000624568
+    },
+    {
+      "graph": "10K-99%",
+      "nodes": 10000,
+      "edges": 104991,
+      "sparsity_pct": 99.895009,
+      "sparse_time_s": 0.00668370000039431,
+      "dense_time_s": 3.2518018999999185,
+      "speedup": 486.52720795488665,
+      "winner": "Sparse",
+      "best_time": 0.00668370000039431
+    }
+  ],
+  "gpu_results": [
+    {
+      "graph": "4K-99%",
+      "nodes": 4000,
+      "edges": 16795,
+      "sparsity_pct": 99.89503125,
+      "sparse_time_s": 0.10927380000066478,
+      "dense_time_s": 0.051925300000220886,
+      "speedup": 0.4751852685630498,
+      "winner": "Dense",
+      "best_time": 0.051925300000220886
+    },
+    {
+      "graph": "8K-99%",
+      "nodes": 8000,
+      "edges": 67190,
+      "sparsity_pct": 99.895015625,
+      "sparse_time_s": 0.024614199999632547,
+      "dense_time_s": 0.05311349999919912,
+      "speedup": 2.157839783539259,
+      "winner": "Sparse",
+      "best_time": 0.024614199999632547
+    },
+    {
+      "graph": "10K-99%",
+      "nodes": 10000,
+      "edges": 104991,
+      "sparsity_pct": 99.895009,
+      "sparse_time_s": 0.03477920000023005,
+      "dense_time_s": 0.10718189999988681,
+      "speedup": 3.081781639577042,
+      "winner": "Sparse",
+      "best_time": 0.03477920000023005
+    }
+  ]
+}
