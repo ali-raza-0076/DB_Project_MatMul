@@ -27,10 +27,17 @@ Compare: **Dense GPU** vs **Sparse CPU**
 
 ## Files in This Folder
 
+### Benchmarking (Original):
 1. **`gpu_sparsity_comparison.ipynb`** - Colab notebook for dense baseline
 2. **`gpu_gnn_benchmark.ipynb`** - Colab notebook for GNN graphs
 3. **`data/`** - Copy of test data (uploaded to Colab)
 4. **`results/`** - GPU benchmark results (download from Colab)
+
+### **NEW: Block-Based Multiplication for Large Matrices**:
+5. **`gpu_block_multiplication.py`** - Block multiplication module (handles matrices larger than GPU memory)
+6. **`gpu_block_multiplication.ipynb`** - 🔥 **Main Colab notebook** for large matrix multiplication
+7. **`test_block_multiplication.py`** - Test script for verification
+8. **`BLOCK_MULTIPLICATION_README.md`** - 📖 **Complete documentation** for block-based approach
 
 ## How to Use
 
@@ -92,3 +99,71 @@ After merging results, you'll get:
 | 99%      | 0.001s     | 1.881s    | ???       | ???         |
 
 This will answer: **Does sparse CPU beat dense GPU at extreme sparsity?**
+
+---
+
+## 🚀 NEW: Block-Based GPU Multiplication
+
+### Problem: Large Matrices Don't Fit in GPU Memory
+
+- **100,000 × 100,000 matrix** = 80GB RAM needed (if dense)
+- **Google Colab GPU**: Only 12-15GB RAM
+- **Current approach**: Load entire matrix → **CRASHES** ❌
+
+### Solution: Process in Blocks
+
+Instead of loading the entire matrix:
+1. Load small **block** of rows from A (fits in GPU)
+2. Load small **block** of columns from B
+3. Multiply **on GPU**
+4. Save result **chunk to disk**
+5. Repeat for all blocks
+
+**Result**:
+- ✅ Can multiply matrices of **ANY size** (even 1TB!)
+- ✅ Only need GPU memory for small chunks
+- ✅ Uses GPU speed without memory crashes
+
+### Quick Start
+
+1. **Upload to Google Colab**: `gpu_block_multiplication.ipynb`
+2. **Enable GPU**: Runtime → Change runtime type → GPU
+3. **Upload data**: `matrix_a.csv`, `matrix_b.csv` from `data/input/`
+4. **Run all cells** - it will automatically:
+   - Estimate optimal block size
+   - Multiply matrices in chunks
+   - Save results to disk
+5. **Download results**: `result_matrix.npz`
+
+### Documentation
+
+See **`BLOCK_MULTIPLICATION_README.md`** for:
+- Detailed usage instructions
+- Performance comparisons
+- Memory optimization tips
+- Troubleshooting guide
+- Theory and examples
+
+### Test Locally (Optional)
+
+Before running on large matrices, test with small data:
+
+```bash
+python test_block_multiplication.py
+```
+
+This verifies:
+- GPU is working correctly
+- Block multiplication matches CPU results
+- Performance is as expected
+
+---
+
+## 📊 When to Use Each Method
+
+| Matrix Size | Sparsity | Best Method |
+|------------|----------|-------------|
+| < 10K × 10K | Any | Dense GPU (existing notebooks) |
+| < 50K × 50K | > 99% | Sparse CPU (main project) |
+| **> 50K × 50K** | **Any** | **🔥 Block GPU (NEW!)** |
+| **100K × 100K+** | **Any** | **🔥 Block GPU (NEW!)** |
